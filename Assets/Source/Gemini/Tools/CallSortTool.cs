@@ -56,13 +56,14 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         if (sort == null) { result["error"] = "Sort tool not found in scene."; return; }
 
         string hint = args.order != null && args.order.Length > 0 ? args.order[0] : args.from;
-        if (!EnsureAxisArmed(sort, "sort", args.axis, hint, result, out bool isColumn)) return;
+        if (!ResolveAxis("sort", args.axis, hint, result, out bool isColumn)) return;
         string axis = isColumn ? "columns" : "rows";
 
         var data = Scene.Data;
         if (data == null) { result["error"] = "No data source found in scene."; return; }
 
-        int count = (isColumn ? data.ColumnOrder : data.RowOrder).Count;
+        int lineCount = (isColumn ? data.ColumnOrder : data.RowOrder).Count;
+        int count = data.GroupCount(isColumn);
         if (count == 0) { result["error"] = $"The sheet has no {axis} to move."; return; }
 
         result["direction"] = axis;
@@ -95,7 +96,7 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         }
         lastSortRound[axisSlot] = round;
 
-        if (wantsOrder) RunOrder(args, sort, data, isColumn, axis, count, result);
+        if (wantsOrder) RunOrder(args, sort, data, isColumn, axis, lineCount, result);
         else if (wantsBy) RunBy(args, sort, data, isColumn, axis, count, result);
         else RunMove(args, sort, data, isColumn, axis, count, result);
     }
@@ -103,21 +104,28 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
     private static readonly int[] lastSortRound = { -1, -1 };
 
     private static void RunOrder(Args args, SortTool sort, DataSource data, bool isColumn,
-        string axis, int count, Dictionary<string, object> result) {
+        string axis, int lineCount, Dictionary<string, object> result) {
 
+        if (!TryResolveLines(args.order, isColumn, 0, lineCount - 1, result, out List<int> wanted)) return;
 
-        if (!TryResolveLines(args.order, isColumn, 0, count - 1, result, out List<int> wanted)) return;
-
+        // 'wanted' holds blocks. Emitting each block's lines together keeps the
+        // order group-aligned, which is the only shape the dataset will accept.
         IReadOnlyList<int> live = isColumn ? data.ColumnOrder : data.RowOrder;
-        var target = new List<int>(count);
+        int size = data.GroupSize(isColumn);
+        var target = new List<int>(lineCount);
         var taken = new HashSet<int>();
-        for (int i = 0; i < wanted.Count; i++) {
-            int key = live[wanted[i]];
-            target.Add(key);
-            taken.Add(key);
+
+        for (int i = 0; i < wanted.Count; i++)
+            for (int sIdx = 0; sIdx < size; sIdx++) {
+                int key = live[wanted[i] * size + sIdx];
+                target.Add(key);
+                taken.Add(key);
+            }
+
+        for (int v = 0; v < live.Count; v += size) {
+            if (taken.Contains(live[v])) continue;
+            for (int sIdx = 0; sIdx < size; sIdx++) target.Add(live[v + sIdx]);
         }
-        for (int v = 0; v < live.Count; v++)
-            if (!taken.Contains(live[v])) target.Add(live[v]);
 
         Commit(sort, data, isColumn, axis, live, target, result);
     }
@@ -148,6 +156,20 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
             return;
         }
 
+        // Ranking only means something within one metric. Ordering the metrics
+        // themselves by their numbers would compare different units, and ranking
+        // rows across every metric would add dollars to share counts.
+        if (data.IsGrouped(isColumn)) {
+            result["error"] = "The metrics are in different units, so they cannot be ranked against each other. " +
+                "Give 'order' with the metrics in the sequence you want instead.";
+            return;
+        }
+        if (data.IsGrouped(!isColumn) && !hasLine) {
+            result["error"] = "Each row spans several metrics in different units, so there is no single number to " +
+                "rank them by. Name the metric in 'by.line', such as {line: 'Revenue'}.";
+            return;
+        }
+
         string measure = null;
         if (hasMeasure && !TryParseMeasure(args.by.measure, "by", result, out measure)) return;
         bool biggestFirst = !string.Equals(args.by.first, "smallest", System.StringComparison.OrdinalIgnoreCase);
@@ -156,8 +178,15 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
                               : (data.ColumnOrder != null ? data.ColumnOrder.Count : 0);
         if (across == 0) { result["error"] = $"The sheet has no values to rank the {axis} by."; return; }
 
-        int crossLine = -1;
-        if (hasLine && !TryResolveLine(args.by.line, !isColumn, 0, across - 1, result, out crossLine)) return;
+        int crossLo = -1, crossHi = -1;
+        if (hasLine) {
+            if (!TryResolveLine(args.by.line, !isColumn, 0, across - 1, result, out int crossBlock)) return;
+            BlockSpan(!isColumn, crossBlock, 0, across - 1, out crossLo, out crossHi);
+        }
+
+        // A named metric may cover more than one cell per row, so rank by the
+        // measure over its cells; a single cell reads the same either way.
+        string crossMeasure = measure ?? "sum";
 
         IReadOnlyList<int> live = isColumn ? data.ColumnOrder : data.RowOrder;
         var ranked = new List<KeyValuePair<double, int>>(count);
@@ -166,7 +195,9 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         for (int i = 0; i < count && i < live.Count; i++) {
             double score;
             bool has = hasLine
-                ? TryCellValue(data, isColumn ? crossLine : i, isColumn ? i : crossLine, out score)
+                ? (crossLo == crossHi
+                    ? TryCellValue(data, isColumn ? crossLo : i, isColumn ? i : crossLo, out score)
+                    : TryLineMeasure(data, isColumn, i, crossLo, crossHi, crossMeasure, out score))
                 : TryLineMeasure(data, isColumn, i, 0, across - 1, measure, out score);
             if (has) ranked.Add(new KeyValuePair<double, int>(score, live[i]));
             else unranked.Add(live[i]);
@@ -184,7 +215,10 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         }
         target.AddRange(unranked);
 
-        result["rankedBy"] = hasLine ? data.TitleAt(!isColumn, crossLine) : measure;
+        result["rankedBy"] = hasLine
+            ? DataSource.GroupLabelAt(data, !isColumn, data.GroupOf(!isColumn, crossLo))
+              + (crossLo == crossHi ? "" : $" ({crossMeasure} of both years)")
+            : measure;
         result["first"] = biggestFirst ? "biggest" : "smallest";
         if (ranked.Count <= MaxEchoedLines) result["scores"] = scores;
         if (unranked.Count > 0) result["unranked"] = unranked.Count;
@@ -197,10 +231,11 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         string axis, int count, Dictionary<string, object> result) {
 
         if (!args.to.HasValue) { result["error"] = "Provide 'to' with 'from'."; return; }
-        string what = isColumn ? "column" : "row";
+        string what = DataSource.GroupNoun(data, isColumn);
+        int size = data.GroupSize(isColumn);
         var pre = new List<int>(isColumn ? data.ColumnOrder : data.RowOrder);
 
-        if (!TryResolveLine(args.from, isColumn, 0, count - 1, result, out int fromPos)) return;
+        if (!TryResolveLine(args.from, isColumn, 0, pre.Count - 1, result, out int fromPos)) return;
         int toPos = Mathf.Clamp(args.to.Value - 1, 0, count - 1);
         string clampNote = toPos == args.to.Value - 1 ? null
             : $"The {axis} run 1 to {count}, so position {args.to.Value} became {toPos + 1}.";
@@ -222,9 +257,9 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         }
 
         if (clampNote != null) result["note"] = clampNote;
-        int key = pre[fromPos];
-        pre.RemoveAt(fromPos);
-        pre.Insert(toPos, key);
+        List<int> moved = pre.GetRange(fromPos * size, size);
+        pre.RemoveRange(fromPos * size, size);
+        pre.InsertRange(toPos * size, moved);
         EchoOrder(data, isColumn, pre, result);
         result["undoable"] = true;
     }
@@ -234,6 +269,6 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
     private static void EchoOrder(DataSource data, bool isColumn, IReadOnlyList<int> order,
         Dictionary<string, object> result) {
         if (order == null || order.Count > MaxEchoedLines) return;
-        result["order"] = DataSource.TitlesFor(data, isColumn, order);
+        result["order"] = DataSource.BlockTitlesFor(data, isColumn, order);
     }
 }

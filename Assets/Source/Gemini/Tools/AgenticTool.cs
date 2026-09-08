@@ -134,23 +134,32 @@ public abstract class AgenticTool : Function {
         return true;
     }
 
+    // On a grouped axis the agent addresses metrics, not raw columns: names match
+    // the metric, numbers count metrics, and the value returned is a block index.
+    // Rows and ungrouped columns have one line per block, so this is unchanged for
+    // them and every caller below reads the same either way.
     protected static bool TryResolveLine(object arg, bool columns, int min, int max,
-        Dictionary<string, object> result, out int visIndex) {
-        visIndex = -1;
+        Dictionary<string, object> result, out int block) {
+        block = -1;
         string token = AsString(arg)?.Trim();
-        string what = columns ? "column" : "row";
+        var data = Scene.Data;
+        string what = DataSource.GroupNoun(data, columns);
         if (string.IsNullOrEmpty(token)) { result["error"] = $"Provide a {what} number or name."; return false; }
 
-        int span = max - min + 1;
+        int size = data != null ? data.GroupSize(columns) : 1;
+        int blockMin = min / size;
+        int blockMax = max / size;
+        int span = blockMax - blockMin + 1;
+
         if (int.TryParse(token, out int number)) {
             if (StalePositions.IsDirty(columns)) {
                 StalePositions.Clear(columns);
                 var live = Scene.Data;
                 var current = new List<string>();
                 if (live != null) {
-                    int liveCount = (columns ? live.ColumnOrder : live.RowOrder).Count;
-                    for (int v = min; v <= max && v < liveCount; v++)
-                        current.Add(DataSource.LabelAt(live, columns, v));
+                    int liveBlocks = live.GroupCount(columns);
+                    for (int b = blockMin; b <= blockMax && b < liveBlocks; b++)
+                        current.Add(DataSource.GroupLabelAt(live, columns, b));
                 }
                 result["error"] = $"The {what} positions have shifted: the user reordered the {what}s since you " +
                     $"last read them. They now run: {string.Join(", ", current)}. Name the {what} you mean, or " +
@@ -161,43 +170,37 @@ public abstract class AgenticTool : Function {
                 result["error"] = $"There is no {what} {number} there; it has {span}.";
                 return false;
             }
-            visIndex = min + number - 1;
+            block = blockMin + number - 1;
             return true;
         }
 
-        var data = Scene.Data;
         if (data == null) { result["error"] = "No dataset is open."; return false; }
-
-        IReadOnlyList<int> order = columns ? data.ColumnOrder : data.RowOrder;
-        IReadOnlyList<string> titles = columns ? data.ColumnTitles : data.RowTitles;
 
         int found = -1, hits = 0;
         var names = new List<object>();
-        for (int v = min; v <= max; v++) {
-            int d = v >= 0 && v < order.Count ? order[v] : -1;
-            string title = d >= 0 && d < titles.Count ? titles[d] : "";
+        for (int b = blockMin; b <= blockMax; b++) {
+            string title = data.GroupTitleAt(columns, b) ?? "";
             names.Add(title);
             if (!string.Equals(title, token, StringComparison.OrdinalIgnoreCase)) continue;
-            found = v;
+            found = b;
             hits++;
         }
 
         if (hits == 0 && token.Length >= 3) {
-            for (int v = min; v <= max; v++) {
-                int d = v >= 0 && v < order.Count ? order[v] : -1;
-                string title = d >= 0 && d < titles.Count ? titles[d] : "";
+            for (int b = blockMin; b <= blockMax; b++) {
+                string title = data.GroupTitleAt(columns, b) ?? "";
                 if (!title.StartsWith(token, StringComparison.OrdinalIgnoreCase)) continue;
-                found = v;
+                found = b;
                 hits++;
             }
         }
 
-        if (hits == 1) { visIndex = found; return true; }
+        if (hits == 1) { block = found; return true; }
         if (hits > 1) {
             result["error"] = $"More than one {what} is called '{token}'; ask the user which, or give its number.";
             return false;
         }
-        string other = columns ? "row" : "column";
+        string other = DataSource.GroupNoun(data, !columns);
         result["error"] = TitleExistsOnAxis(token, !columns)
             ? $"No {what} called '{token}', but there is a {other} called '{token}'; pass it as '{other}' instead."
             : $"No {what} called '{token}'.";
@@ -205,12 +208,64 @@ public abstract class AgenticTool : Function {
         return false;
     }
 
+    // The line span one block covers, clipped to the piece.
+    protected static void BlockSpan(bool columns, int block, int min, int max, out int lo, out int hi) {
+        var data = Scene.Data;
+        int size = data != null ? data.GroupSize(columns) : 1;
+        lo = Math.Max(block * size, min);
+        hi = Math.Min(block * size + size - 1, max);
+    }
+
+    // Every line the given blocks cover, clipped to the piece.
+    protected static List<int> ExpandBlocks(bool columns, IReadOnlyList<int> blocks, int min, int max) {
+        var lines = new List<int>(blocks.Count);
+        for (int i = 0; i < blocks.Count; i++) {
+            BlockSpan(columns, blocks[i], min, max, out int lo, out int hi);
+            for (int v = lo; v <= hi; v++) lines.Add(v);
+        }
+        return lines;
+    }
+
+    protected static int BlockCountIn(bool columns, int min, int max) {
+        var data = Scene.Data;
+        int size = data != null ? data.GroupSize(columns) : 1;
+        return (max / size) - (min / size) + 1;
+    }
+
+    // Which cell of a block a spoken series name picks out, such as a year on a
+    // paired axis. Returns false when the dataset has no series to choose from.
+    protected static bool TryResolveSeries(string token, bool columns, Dictionary<string, object> result,
+        out int series) {
+        series = -1;
+        var data = Scene.Data;
+        if (data == null || !data.IsGrouped(columns)) {
+            result["error"] = "This dataset has one cell per line, so there is no year to choose.";
+            return false;
+        }
+
+        IReadOnlyList<string> names = data.SeriesTitles;
+        token = token?.Trim();
+        if (string.IsNullOrEmpty(token)) { series = -1; return true; }
+
+        for (int i = 0; i < names.Count; i++)
+            if (string.Equals(names[i], token, StringComparison.OrdinalIgnoreCase)) { series = i; return true; }
+
+        for (int i = 0; i < names.Count; i++)
+            if (names[i] != null && names[i].EndsWith(token, StringComparison.OrdinalIgnoreCase)) { series = i; return true; }
+
+        result["error"] = $"'{token}' is not one of this sheet's columns; it has {string.Join(" and ", names)}.";
+        result["series"] = new List<object>(names);
+        return false;
+    }
+
     protected static bool TryResolveScope(string[] names, bool columns, int min, int max,
         Dictionary<string, object> result, out List<int> lines) {
 
         if (names == null || names.Length == 0) {
-            lines = new List<int>(max - min + 1);
-            for (int i = min; i <= max; i++) lines.Add(i);
+            var data = Scene.Data;
+            int size = data != null ? data.GroupSize(columns) : 1;
+            lines = new List<int>(BlockCountIn(columns, min, max));
+            for (int b = min / size; b <= max / size; b++) lines.Add(b);
             return true;
         }
         return TryResolveLines(names, columns, min, max, result, out lines);
@@ -219,14 +274,14 @@ public abstract class AgenticTool : Function {
     protected static bool TryResolveLines(IReadOnlyList<string> tokens, bool columns, int min, int max,
         Dictionary<string, object> result, out List<int> visIndexes) {
         visIndexes = null;
-        string what = columns ? "column" : "row";
+        string what = DataSource.GroupNoun(Scene.Data, columns);
 
         if (tokens == null || tokens.Count == 0) {
             result["error"] = $"Provide at least one {what} name or number.";
             return false;
         }
 
-        int span = max - min + 1;
+        int span = BlockCountIn(columns, min, max);
         if (tokens.Count > span) {
             result["error"] = $"That is {tokens.Count} entries but there are only {span} {what}s.";
             return false;
@@ -335,6 +390,13 @@ public abstract class AgenticTool : Function {
         var data = Scene.Data;
         if (data == null) return false;
 
+        if (data.IsGrouped(columns)) {
+            int blocks = data.GroupCount(columns);
+            for (int b = 0; b < blocks; b++)
+                if (string.Equals(data.GroupTitleAt(columns, b), token, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
         IReadOnlyList<string> titles = columns ? data.ColumnTitles : data.RowTitles;
         for (int i = 0; i < titles.Count; i++)
             if (string.Equals(titles[i], token, StringComparison.OrdinalIgnoreCase)) return true;
@@ -435,10 +497,9 @@ public abstract class AgenticTool : Function {
         return pre;
     }
 
-    protected static bool EnsureAxisArmed(ToolOptions tool, string toolName, string axisArg, string inferFrom,
+    protected static bool ResolveAxis(string toolName, string axisArg, string inferFrom,
         Dictionary<string, object> result, out bool columns) {
         columns = false;
-        if (tool == null) { result["error"] = $"The {toolName} tool was not found in the scene."; return false; }
 
         if (!string.IsNullOrEmpty(axisArg)) {
             string a = axisArg.Trim().ToLowerInvariant();
@@ -447,21 +508,17 @@ public abstract class AgenticTool : Function {
                 return false;
             }
             columns = a == "columns";
-            tool.SetOption(columns ? "columns" : "rows");
             result["axisFrom"] = "given";
             return true;
         }
 
-        if (tool.TryGetAxis(out columns)) { result["axisFrom"] = "armed"; return true; }
-
         if (TryInferAxis(inferFrom, out columns)) {
-            tool.SetOption(columns ? "columns" : "rows");
             result["axisFrom"] = "inferred";
             return true;
         }
 
         NeedChoice(result, "axis", new List<string> { "columns", "rows" },
-            $"The {toolName} tool works on columns or rows and neither is chosen. Ask the user which, then call this again with 'axis'.");
+            $"The {toolName} tool works on columns or rows and the name you gave does not say which. Ask the user which, then call this again with 'axis'.");
         return false;
     }
 

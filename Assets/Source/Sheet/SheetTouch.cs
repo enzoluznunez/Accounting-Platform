@@ -51,7 +51,7 @@ public class SheetTouch : MonoBehaviour
         {
             Source source = _pokes[i];
             if (!Live(source)) continue;
-            if (!Acquire(source.poke)) continue;
+            if (!Acquire(source)) continue;
             _driver = source.poke;
             return;
         }
@@ -93,20 +93,28 @@ public class SheetTouch : MonoBehaviour
         return default;
     }
 
-    private bool Acquire(PokeInteractor poke)
+    private static Vector3 WristOf(Source source, Vector3 tip) =>
+        source.hand != null && source.hand.GetJointPose(HandJointId.HandWristRoot, out Pose wrist)
+            ? wrist.position
+            : tip;
+
+    private bool Acquire(Source source)
     {
+        PokeInteractor poke = source.poke;
+        Vector3 tip = poke.Origin;
         float reach = Mathf.Max(poke.Radius, 0f) + Mathf.Max(hoverEnter, 0f);
-        if (!SheetRaycast.NearestCube(poke.Origin, reach, out SheetRaycast.Hit hit)) return false;
+        if (!SheetRaycast.NearestCube(tip, reach, out SheetRaycast.Hit hit)) return false;
 
         _cube = hit.cube;
         _selected = false;
-        _hub.Hover(ReadSheets.Describe(hit.cube, hit.point));
+        _hub.Hover(ReadSheets.Describe(hit, tip, WristOf(source, tip)));
         return true;
     }
 
     private bool Track(PokeInteractor poke)
     {
-        if (!Live(Current())) return false;
+        Source source = Current();
+        if (!Live(source)) return false;
 
         Vector3 tip = poke.Origin;
         float radius = Mathf.Max(poke.Radius, 0f);
@@ -114,7 +122,7 @@ public class SheetTouch : MonoBehaviour
 
         if (!SheetRaycast.NearestCube(tip, reach, out SheetRaycast.Hit hit)) return false;
 
-        ReadSheets.Reading reading = ReadSheets.Describe(hit.cube, hit.point);
+        ReadSheets.Reading reading = ReadSheets.Describe(hit, tip, WristOf(source, tip));
         _cube = hit.cube;
 
         if (_selected)

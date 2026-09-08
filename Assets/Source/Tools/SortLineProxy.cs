@@ -10,7 +10,7 @@ public class SortLineProxy : MonoBehaviour
 {
     public CreateSheet sheet;
     public bool columns;
-    public int line;
+    public int block;
 
     private Grabbable _grabbable;
 
@@ -18,46 +18,64 @@ public class SortLineProxy : MonoBehaviour
 
     public float Coord => columns ? transform.localPosition.x : transform.localPosition.z;
 
-    public static SortLineProxy Create(CreateSheet owner, bool columns, int line, float height)
+    private const float RowBand = 0.25f;
+    private const float ColumnBand = 0.75f;
+    private const float BandHeight = 0.45f;
+
+    // One handle per block, so a grouped axis is grabbed a whole metric at a time
+    // and its years can never be pulled apart.
+    public static SortLineProxy Create(CreateSheet owner, bool columns, int block, float height)
     {
         if (owner == null) return null;
 
         float cell = owner.CellSize;
         if (cell <= 1e-6f || height <= 1e-6f) return null;
 
-        int min = columns ? owner.colMin : owner.rowMin;
-        int max = columns ? owner.colMax : owner.rowMax;
-        if (line < min || line > max) return null;
+        int min = owner.BlockMin(columns);
+        int max = owner.BlockMax(columns);
+        if (block < min || block > max) return null;
 
         int perpMin = columns ? owner.rowMin : owner.colMin;
         int perpMax = columns ? owner.rowMax : owner.colMax;
-        float span = (perpMax - perpMin + 1) * cell;
+        float span = owner.LineCoord(!columns, perpMax) - owner.LineCoord(!columns, perpMin) + cell;
+        float thickness = owner.GroupSizeOn(columns) * cell;
 
-        GameObject go = new GameObject($"SortLine_{(columns ? "Col" : "Row")}_{line}");
+        GameObject go = new GameObject($"SortLine_{(columns ? "Col" : "Row")}_{block}");
         go.transform.SetParent(owner.transform, false);
 
-        float coord = owner.LineCoord(columns, line);
+        float coord = owner.BlockCoord(columns, block);
+        float bandCentre = height * (columns ? ColumnBand : RowBand);
         go.transform.localPosition = columns
-            ? new Vector3(coord, height * 0.5f, 0f)
-            : new Vector3(0f, height * 0.5f, coord);
+            ? new Vector3(coord, bandCentre, 0f)
+            : new Vector3(0f, bandCentre, coord);
         go.transform.localRotation = Quaternion.identity;
         go.transform.localScale = Vector3.one;
 
         SortLineProxy proxy = go.AddComponent<SortLineProxy>();
         proxy.sheet = owner;
         proxy.columns = columns;
-        proxy.line = line;
-        proxy.Build(cell, span, height, (min - line) * cell, (max - line) * cell);
+        proxy.block = block;
+        proxy.Build(thickness, span, height, owner.BlockPitch(columns),
+            owner.BlockCoord(columns, min) - coord, owner.BlockCoord(columns, max) - coord);
         return proxy;
     }
 
-    private void Build(float cell, float span, float height, float back, float forward)
+    private void Build(float cell, float span, float height, float handle, float back, float forward)
     {
         BoxCollider box = GetComponent<BoxCollider>();
         box.center = Vector3.zero;
         box.size = columns
-            ? new Vector3(cell, height, span)
-            : new Vector3(span, height, cell);
+            ? new Vector3(cell, height * BandHeight, span)
+            : new Vector3(span, height * BandHeight, cell);
+
+        float lift = height * 0.5f - transform.localPosition.y;
+        for (int end = -1; end <= 1; end += 2)
+        {
+            BoxCollider grip = gameObject.AddComponent<BoxCollider>();
+            float along = (span + handle) * 0.5f * end;
+            grip.center = columns ? new Vector3(0f, lift, along) : new Vector3(along, lift, 0f);
+            grip.size = columns ? new Vector3(cell, height, handle) : new Vector3(handle, height, cell);
+        }
 
         Rigidbody body = GetComponent<Rigidbody>();
         body.isKinematic = true;

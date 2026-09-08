@@ -54,6 +54,147 @@ public abstract class DataSource : MonoBehaviour
         return -1;
     }
 
+    // Consecutive columns may belong to one group: a metric holding one cell per
+    // year, drawn as a tight pair. Rows are never grouped, so both axes share one
+    // code path and a group size of 1 is exactly the ungrouped behaviour.
+
+    public int ColumnGroupSize => _columnGroupSize;
+    public IReadOnlyList<string> SeriesTitles => _seriesTitles;
+
+    public bool IsGrouped(bool columns) => GroupSize(columns) > 1;
+
+    public int GroupSize(bool columns) => columns ? _columnGroupSize : 1;
+
+    public int GroupCount(bool columns)
+    {
+        int lines = (columns ? _columnOrder : _rowOrder).Count;
+        int size = GroupSize(columns);
+        return size > 1 ? lines / size : lines;
+    }
+
+    public int GroupOf(bool columns, int visIndex)
+    {
+        int size = GroupSize(columns);
+        return size > 1 ? visIndex / size : visIndex;
+    }
+
+    public int SeriesOf(bool columns, int visIndex)
+    {
+        int size = GroupSize(columns);
+        return size > 1 ? visIndex % size : 0;
+    }
+
+    public void GroupSpan(bool columns, int group, out int lo, out int hi)
+    {
+        int size = GroupSize(columns);
+        lo = group * size;
+        hi = lo + size - 1;
+    }
+
+    public string GroupTitleAt(bool columns, int group)
+    {
+        int size = GroupSize(columns);
+        if (size <= 1) return TitleAt(columns, group);
+
+        IReadOnlyList<int> order = columns ? _columnOrder : _rowOrder;
+        int vis = group * size;
+        if (order == null || vis < 0 || vis >= order.Count) return null;
+
+        return GroupTitleOfData(columns, order[vis]) ?? TitleAt(columns, vis);
+    }
+
+    public string GroupTitleOfData(bool columns, int dataIndex)
+    {
+        IReadOnlyList<string> titles = columns ? _columnTitles : _rowTitles;
+        int size = GroupSize(columns);
+        if (size <= 1)
+            return dataIndex >= 0 && dataIndex < titles.Count ? titles[dataIndex] : null;
+
+        int g = dataIndex / size;
+        return g >= 0 && g < _groupTitles.Count ? _groupTitles[g] : null;
+    }
+
+    // One name per addressable block in an order: per metric on a grouped axis,
+    // per line otherwise.
+    public static List<string> BlockTitlesFor(DataSource data, bool columns, IReadOnlyList<int> order)
+    {
+        var list = new List<string>();
+        if (data == null || order == null) return list;
+
+        int size = data.GroupSize(columns);
+        for (int i = 0; i < order.Count; i += size)
+            list.Add(data.GroupTitleOfData(columns, order[i]));
+        return list;
+    }
+
+    public string SeriesTitleAt(bool columns, int visIndex)
+    {
+        int size = GroupSize(columns);
+        if (size <= 1) return null;
+        int s = visIndex % size;
+        return s >= 0 && s < _seriesTitles.Count ? _seriesTitles[s] : null;
+    }
+
+    // What one addressable line is called: a metric on a grouped axis, otherwise
+    // the column or row itself.
+    public static string GroupLabelAt(DataSource data, bool columns, int group)
+    {
+        string title = data != null ? data.GroupTitleAt(columns, group) : null;
+        if (!string.IsNullOrEmpty(title)) return title;
+        return $"{GroupNoun(data, columns)} {group + 1}";
+    }
+
+    public static string GroupNoun(DataSource data, bool columns) =>
+        data != null && data.IsGrouped(columns) ? "metric" : columns ? "column" : "row";
+
+    protected void SetColumnGroupSize(int size)
+    {
+        _columnGroupSize = size > 1 ? size : 1;
+        BuildColumnGroups();
+    }
+
+    private void BuildColumnGroups()
+    {
+        _groupTitles.Clear();
+        _seriesTitles.Clear();
+
+        int size = _columnGroupSize;
+        if (size <= 1) return;
+
+        int groups = _columnTitles.Count / size;
+        for (int g = 0; g < groups; g++)
+        {
+            int first = g * size;
+            string shared = _columnTitles[first];
+            for (int s = 1; s < size; s++) shared = SharedPrefix(shared, _columnTitles[first + s]);
+            shared = shared.Trim();
+            _groupTitles.Add(shared.Length > 0 ? shared : _columnTitles[first]);
+        }
+
+        string stem = groups > 0 ? _groupTitles[0] : "";
+        for (int s = 0; s < size; s++)
+        {
+            string title = s < _columnTitles.Count ? _columnTitles[s] : "";
+            _seriesTitles.Add(stem.Length > 0 && title.StartsWith(stem, StringComparison.Ordinal)
+                ? title.Substring(stem.Length).Trim()
+                : title);
+        }
+    }
+
+    // The shared opening of two titles, cut back to a word boundary so
+    // "Revenue 2019" and "Revenue 2020" share "Revenue", not "Revenue 20".
+    private static string SharedPrefix(string a, string b)
+    {
+        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return "";
+        if (string.Equals(a, b, StringComparison.Ordinal)) return a;
+
+        int n = Mathf.Min(a.Length, b.Length);
+        int i = 0;
+        while (i < n && a[i] == b[i]) i++;
+        while (i > 0 && !char.IsWhiteSpace(a[i - 1])) i--;
+        return a.Substring(0, i);
+    }
+
     public SortMode ColumnSortMode => _columnSortMode;
     public SortMode RowSortMode => _rowSortMode;
 
@@ -77,6 +218,15 @@ public abstract class DataSource : MonoBehaviour
     protected float _globalMin;
     protected float _globalMax = 1f;
 
+    protected int _columnGroupSize = 1;
+    private readonly List<string> _groupTitles = new List<string>();
+    private readonly List<string> _seriesTitles = new List<string>();
+
+    // One scale per column group, so metrics of wildly different size stay
+    // readable. Ungrouped data keeps a single bucket, which cancels out and
+    // leaves the fractions below arithmetically unchanged.
+    private float[] _scales = new float[0];
+
     protected List<int> _columnOrder = new List<int>();
     protected List<int> _rowOrder = new List<int>();
     protected SortMode _columnSortMode = SortMode.Original;
@@ -94,8 +244,6 @@ public abstract class DataSource : MonoBehaviour
     {
         _values = new float[rowCount, colCount];
         _valid = new bool[rowCount, colCount];
-        _globalMin = float.MaxValue;
-        _globalMax = float.MinValue;
         int filled = 0;
 
         for (int r = 0; r < rowCount; r++)
@@ -108,8 +256,6 @@ public abstract class DataSource : MonoBehaviour
                     _values[r, c] = v.Value;
                     _valid[r, c] = true;
                     filled++;
-                    if (v.Value < _globalMin) _globalMin = v.Value;
-                    if (v.Value > _globalMax) _globalMax = v.Value;
                 }
                 else
                 {
@@ -118,6 +264,46 @@ public abstract class DataSource : MonoBehaviour
                 }
             }
         }
+
+        BuildScales(rowCount, colCount, filled);
+        return filled;
+    }
+
+    private int BucketOf(int colIndex) => _columnGroupSize > 1 ? colIndex / _columnGroupSize : 0;
+
+    // Each group is divided by its own largest magnitude before any fraction is
+    // taken, so a metric in trillions and a metric in single dollars both fill the
+    // bar height, and zero stays on one shared plane. With a single bucket the
+    // divisor cancels from every fraction below, so ungrouped data is unaffected.
+    private void BuildScales(int rowCount, int colCount, int filled)
+    {
+        int buckets = _columnGroupSize > 1 ? BucketOf(colCount - 1) + 1 : 1;
+        _scales = new float[Mathf.Max(buckets, 1)];
+
+        for (int c = 0; c < colCount; c++)
+        {
+            int b = BucketOf(c);
+            for (int r = 0; r < rowCount; r++)
+            {
+                if (!_valid[r, c]) continue;
+                float m = Mathf.Abs(_values[r, c]);
+                if (m > _scales[b]) _scales[b] = m;
+            }
+        }
+
+        for (int b = 0; b < _scales.Length; b++)
+            if (_scales[b] <= 0f) _scales[b] = 1f;
+
+        _globalMin = float.MaxValue;
+        _globalMax = float.MinValue;
+        for (int r = 0; r < rowCount; r++)
+            for (int c = 0; c < colCount; c++)
+            {
+                if (!_valid[r, c]) continue;
+                float n = Normalized(r, c);
+                if (n < _globalMin) _globalMin = n;
+                if (n > _globalMax) _globalMax = n;
+            }
 
         if (filled == 0)
         {
@@ -130,8 +316,13 @@ public abstract class DataSource : MonoBehaviour
             else if (_globalMax < 0f) _globalMax = 0f;
             else _globalMax = _globalMin + 1f;
         }
+    }
 
-        return filled;
+    private float Normalized(int rowIndex, int colIndex)
+    {
+        int b = BucketOf(colIndex);
+        float k = b >= 0 && b < _scales.Length ? _scales[b] : 1f;
+        return k > 0f ? _values[rowIndex, colIndex] / k : _values[rowIndex, colIndex];
     }
 
     protected virtual void EnsureOrders()
@@ -157,7 +348,7 @@ public abstract class DataSource : MonoBehaviour
 
     public bool SetColumnOrder(IReadOnlyList<int> order, SortMode mode)
     {
-        if (!ApplyOrder(_columnOrder, order, ColumnCount)) return false;
+        if (!ApplyOrder(_columnOrder, order, ColumnCount, _columnGroupSize)) return false;
         _columnSortMode = mode;
         RaiseOrderChanged();
         return true;
@@ -165,15 +356,20 @@ public abstract class DataSource : MonoBehaviour
 
     public bool SetRowOrder(IReadOnlyList<int> order, SortMode mode)
     {
-        if (!ApplyOrder(_rowOrder, order, RowCount)) return false;
+        if (!ApplyOrder(_rowOrder, order, RowCount, 1)) return false;
         _rowSortMode = mode;
         RaiseOrderChanged();
         return true;
     }
 
+    // Positions are line indexes on both axes; on a grouped axis the whole group
+    // holding 'fromPos' travels to the group slot holding 'toPos'.
     public void MoveColumn(int fromPos, int toPos)
     {
-        if (MoveWithin(_columnOrder, fromPos, toPos)) SetColumnOrder(_columnOrder, SortMode.Manual);
+        bool moved = _columnGroupSize > 1
+            ? MoveGroupWithin(_columnOrder, fromPos / _columnGroupSize, toPos / _columnGroupSize, _columnGroupSize)
+            : MoveWithin(_columnOrder, fromPos, toPos);
+        if (moved) SetColumnOrder(_columnOrder, SortMode.Manual);
     }
 
     public void MoveRow(int fromPos, int toPos)
@@ -192,14 +388,46 @@ public abstract class DataSource : MonoBehaviour
         return true;
     }
 
-    private static bool ApplyOrder(List<int> target, IReadOnlyList<int> order, int count)
+    private static bool MoveGroupWithin(List<int> order, int fromGroup, int toGroup, int groupSize)
+    {
+        int groups = order.Count / groupSize;
+        if (groups <= 0 || fromGroup < 0 || fromGroup >= groups) return false;
+        toGroup = Mathf.Clamp(toGroup, 0, groups - 1);
+        if (toGroup == fromGroup) return false;
+
+        List<int> block = order.GetRange(fromGroup * groupSize, groupSize);
+        order.RemoveRange(fromGroup * groupSize, groupSize);
+        order.InsertRange(toGroup * groupSize, block);
+        return true;
+    }
+
+    private static bool ApplyOrder(List<int> target, IReadOnlyList<int> order, int count, int groupSize)
     {
         if (order == null || order.Count != count || !IsPermutation(order, count)) return false;
+        if (!IsGroupAligned(order, groupSize)) return false;
 
         if (!ReferenceEquals(target, order))
         {
             target.Clear();
             for (int i = 0; i < order.Count; i++) target.Add(order[i]);
+        }
+        return true;
+    }
+
+    // A grouped axis may only be reordered by whole groups, each keeping its
+    // members in sequence. Rejecting anything else here makes it impossible for
+    // any caller, by hand or by tool, to split a pair.
+    private static bool IsGroupAligned(IReadOnlyList<int> order, int groupSize)
+    {
+        if (groupSize <= 1) return true;
+        if (order.Count % groupSize != 0) return false;
+
+        for (int i = 0; i < order.Count; i += groupSize)
+        {
+            int first = order[i];
+            if (first % groupSize != 0) return false;
+            for (int s = 1; s < groupSize; s++)
+                if (order[i + s] != first + s) return false;
         }
         return true;
     }
@@ -254,7 +482,7 @@ public abstract class DataSource : MonoBehaviour
     {
         if (!HasValue(rowIndex, colIndex)) return 0f;
         if (!TryBaselineRange(_globalMin, _globalMax, out float lo, out float range)) return 0f;
-        return (GetValue(rowIndex, colIndex) - lo) / range;
+        return (Normalized(rowIndex, colIndex) - lo) / range;
     }
 
     public float ZeroFraction =>
@@ -265,7 +493,8 @@ public abstract class DataSource : MonoBehaviour
         float range = _globalMax - _globalMin;
         if (range <= 0f) return 0f;
 
-        float v = GetValue(rowIndex, colIndex);
+        if (!HasValue(rowIndex, colIndex)) return 0f;
+        float v = Normalized(rowIndex, colIndex);
         if (float.IsNaN(v)) return 0f;
         return (v - _globalMin) / range;
     }

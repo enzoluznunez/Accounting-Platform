@@ -8,8 +8,10 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
     public class Args {
         [Doc("The row to read: its name, or its 1-based position. Give it with 'column' for one cell, or alone to read across the row."), Optional]
         public string row;
-        [Doc("The column to read: its name, or its 1-based position. Give it with 'row' for one cell, or alone to read down the column."), Optional]
+        [Doc("The metric to read: its name, or its 1-based position. Give it with 'row' for one company's figures, or alone to read down the metric."), Optional]
         public string column;
+        [Doc("Which year of a paired metric to read, such as '2019'. Leave it out to get both years."), Optional]
+        public string year;
         [Doc("A sheet id from ListDatasets, to read only that piece. Omit to read the whole dataset."), Optional]
         public int? sheet;
     }
@@ -20,6 +22,8 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
                       "Give 'row' and 'column' together for a single cell, 'row' alone to read across that row, " +
                       "'column' alone to read down that column, or neither to read the whole block; a block over " +
                       "100 cells is refused, so read a large sheet a row or column at a time. " +
+                      "When the sheet pairs its columns, 'column' names the metric and covers both its years; add " +
+                      "'year' to read just one of them. " +
                       "Rows and columns take a name or a 1-based position, and readings come back in display order, " +
                       "so a Sort reorder is reflected in them. A cell with no value reads as null, never as zero. " +
                       "This is the source for anything numeric: read the values you need and work out totals, averages, " +
@@ -51,22 +55,40 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
         bool hasRow = !string.IsNullOrWhiteSpace(args.row);
         bool hasColumn = !string.IsNullOrWhiteSpace(args.column);
 
-        int visRow = -1, visCol = -1;
+        int visRow = -1;
+        int colLo = colMin, colHi = colMax;
         if (hasRow && !TryResolveLine(args.row, false, rowMin, rowMax, result, out visRow)) return;
-        if (hasColumn && !TryResolveLine(args.column, true, colMin, colMax, result, out visCol)) return;
+        if (hasColumn) {
+            if (!TryResolveLine(args.column, true, colMin, colMax, result, out int block)) return;
+            BlockSpan(true, block, colMin, colMax, out colLo, out colHi);
+
+            // A named year narrows a paired metric to the one cell it asks for.
+            if (!string.IsNullOrWhiteSpace(args.year)) {
+                if (!TryResolveSeries(args.year, true, result, out int series)) return;
+                if (series >= 0) colLo = colHi = System.Math.Min(colLo + series, colHi);
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(args.year)) {
+            result["error"] = "'year' picks one column of a metric, so give 'column' as well.";
+            return;
+        }
 
         if (piece != null) result["sheet"] = id;
 
         bool wholeRows = rowMin == 0 && rowMax == mgr.RowCount - 1;
         bool wholeColumns = colMin == 0 && colMax == mgr.ColCount - 1;
 
-        if (hasRow && hasColumn) Cell(data, visRow, visCol, result);
+        if (hasRow && hasColumn) {
+            if (colLo == colHi) Cell(data, visRow, colLo, result);
+            else Block(data, visRow, visRow, colLo, colHi, result);
+        }
         else if (hasRow) {
             Line(data, false, visRow, colMin, colMax, result);
             if (wholeColumns) NoteRefreshed(true);
         }
         else if (hasColumn) {
-            Line(data, true, visCol, rowMin, rowMax, result);
+            if (colLo == colHi) Line(data, true, colLo, rowMin, rowMax, result);
+            else Block(data, rowMin, rowMax, colLo, colHi, result);
             if (wholeRows) NoteRefreshed(false);
         }
         else {

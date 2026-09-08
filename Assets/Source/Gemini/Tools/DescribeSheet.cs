@@ -13,7 +13,9 @@ public sealed class DescribeSheet : AgenticTool<DescribeSheet.Args> {
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "DescribeSheet",
         Description = "Read one sheet's shape and placement by its id, from the ids ListDatasets lists for the open " +
-                      "dataset. Returns 'rows' and 'columns', the titles that sheet covers in display order, its " +
+                      "dataset. Returns 'rows' and 'columns', the titles that sheet covers in display order — or " +
+                      "'metrics' and 'columnsPerMetric' when the sheet pairs its columns, one metric holding a cell " +
+                      "per year — its " +
                       "'rowRange' and 'colRange' (the 1-based numbers those titles start and end at, so a title's " +
                       "number is its position within that range), 'rowCategory' and 'columnCategory' (what the rows " +
                       "and columns represent, when the data says), its 'position' when it has one, its 'color' (a " +
@@ -42,12 +44,31 @@ public sealed class DescribeSheet : AgenticTool<DescribeSheet.Args> {
         int colMax = piece != null ? piece.colMax : mgr.ColCount - 1;
 
         result["rows"] = Titles(data.RowOrder, data.RowTitles, rowMin, rowMax);
-        result["columns"] = Titles(data.ColumnOrder, data.ColumnTitles, colMin, colMax);
         if (rowMin == 0 && rowMax == mgr.RowCount - 1) NoteRefreshed(false);
         if (colMin == 0 && colMax == mgr.ColCount - 1) NoteRefreshed(true);
 
         result["rowRange"] = new List<object> { rowMin + 1, rowMax + 1 };
-        result["colRange"] = new List<object> { colMin + 1, colMax + 1 };
+
+        if (data.IsGrouped(true)) {
+            // The columns come in pairs, so name the metrics once and say which
+            // cells sit under each; listing raw column titles would double the
+            // positions the model then has to address.
+            int first = data.GroupOf(true, colMin);
+            int last = data.GroupOf(true, colMax);
+            var metrics = new List<object>();
+            for (int b = first; b <= last; b++) metrics.Add(DataSource.GroupLabelAt(data, true, b));
+
+            result["metrics"] = metrics;
+            result["columnsPerMetric"] = new List<object>(data.SeriesTitles);
+            result["colRange"] = new List<object> { 1, last - first + 1 };
+            result["note"] = "Each metric holds one cell per entry in 'columnsPerMetric', drawn side by side. " +
+                             "Positions on this axis count metrics, not cells, and a metric's two bars cannot be " +
+                             "separated. Bar heights are comparable within a metric but not between metrics.";
+        }
+        else {
+            result["columns"] = Titles(data.ColumnOrder, data.ColumnTitles, colMin, colMax);
+            result["colRange"] = new List<object> { colMin + 1, colMax + 1 };
+        }
         if (!string.IsNullOrEmpty(data.RowAxisTitle)) result["rowCategory"] = data.RowAxisTitle;
         if (!string.IsNullOrEmpty(data.ColumnAxisTitle)) result["columnCategory"] = data.ColumnAxisTitle;
 
@@ -83,6 +104,8 @@ public sealed class DescribeSheet : AgenticTool<DescribeSheet.Args> {
                 entry["direction"] = rec.isColumn ? "column" : "row";
                 entry[rec.isColumn ? "column" : "row"] =
                     Title(data, rec.isColumn, rec.isColumn ? rec.dataCol : rec.dataRow);
+                if (rec.isColumn && data.IsGrouped(true))
+                    entry["metric"] = data.GroupTitleOfData(true, rec.dataCol);
             }
             else {
                 entry["row"] = Title(data, false, rec.dataRow);

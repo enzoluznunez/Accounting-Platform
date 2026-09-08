@@ -48,6 +48,8 @@ public class CreateSheet : MonoBehaviour
     private Coroutine _grow;
     private bool _detached;
     private float _cellSize;
+    private float _groupGap;
+    private int _groupSize = 1;
     private float _height;
     private float _baseY;
 
@@ -63,16 +65,89 @@ public class CreateSheet : MonoBehaviour
     public float BaseY => _baseY;
     public bool IsBuilt => _live.Count > 0;
 
-    public static float Center(int min, int max, float cellSize) => (min + max) * 0.5f * cellSize;
+    // A grouped axis draws its lines in tight blocks — one metric's years sitting
+    // together — with an extra gap between blocks. Every index-to-position
+    // conversion in the app runs through these, so spacing lives in one place and
+    // LineFraction stays exactly LineCoord's inverse.
+    public static float Raw(int line, float cellSize, int groupSize, float groupGap) =>
+        line * cellSize + (groupSize > 1 ? (line / groupSize) * groupGap : 0f);
 
-    public float CenterX => Center(colMin, colMax, _cellSize);
-    public float CenterZ => Center(rowMin, rowMax, _cellSize);
+    public static float Center(int min, int max, float cellSize, int groupSize, float groupGap) =>
+        (Raw(min, cellSize, groupSize, groupGap) + Raw(max, cellSize, groupSize, groupGap)) * 0.5f;
+
+    public static float Center(int min, int max, float cellSize) => Center(min, max, cellSize, 1, 0f);
+
+    public int GroupSizeOn(bool columns) => columns ? _groupSize : 1;
+    public float GroupGapOn(bool columns) => columns ? _groupGap : 0f;
+
+    public float CenterX => Center(colMin, colMax, _cellSize, _groupSize, _groupGap);
+    public float CenterZ => Center(rowMin, rowMax, _cellSize, 1, 0f);
 
     public float LineCoord(bool columns, int line) =>
-        line * _cellSize - (columns ? CenterX : CenterZ);
+        Raw(line, _cellSize, GroupSizeOn(columns), GroupGapOn(columns)) - (columns ? CenterX : CenterZ);
 
-    public float LineFraction(bool columns, float coord) =>
-        _cellSize > 1e-6f ? (coord + (columns ? CenterX : CenterZ)) / _cellSize : 0f;
+    public float LineFraction(bool columns, float coord)
+    {
+        if (_cellSize <= 1e-6f) return 0f;
+
+        float p = coord + (columns ? CenterX : CenterZ);
+        int size = GroupSizeOn(columns);
+        float gap = GroupGapOn(columns);
+        if (size <= 1 || gap <= 0f) return p / _cellSize;
+
+        float pitch = size * _cellSize + gap;
+        float block = Mathf.Floor(p / pitch);
+        float within = p - block * pitch;
+
+        // Inside a block the lines sit one cell apart; across the gap the fraction
+        // runs on smoothly to the next block's first line, so a drag never jumps.
+        float edge = (size - 1) * _cellSize;
+        float step = within <= edge
+            ? within / _cellSize
+            : (size - 1) + (within - edge) / (_cellSize + gap);
+
+        return block * size + step;
+    }
+
+    // A block is one addressable unit along an axis: a whole metric on a grouped
+    // axis, a single line otherwise. Blocks are evenly pitched even when the lines
+    // inside them are not, so anything that drags or reorders can work in block
+    // space and stay the simple uniform problem it always was.
+    public float BlockPitch(bool columns) => GroupSizeOn(columns) * _cellSize + GroupGapOn(columns);
+
+    public int BlockMin(bool columns) => (columns ? colMin : rowMin) / GroupSizeOn(columns);
+    public int BlockMax(bool columns) => (columns ? colMax : rowMax) / GroupSizeOn(columns);
+
+    private float BlockInset(bool columns) => (GroupSizeOn(columns) - 1) * _cellSize * 0.5f;
+
+    public float BlockCoord(bool columns, int block) =>
+        LineCoord(columns, block * GroupSizeOn(columns)) + BlockInset(columns);
+
+    public float BlockFraction(bool columns, float coord)
+    {
+        float pitch = BlockPitch(columns);
+        if (pitch <= 1e-6f) return 0f;
+        return (coord + (columns ? CenterX : CenterZ) - BlockInset(columns)) / pitch;
+    }
+
+    public void LayoutBlock(bool columns, int block, float coord)
+    {
+        int size = GroupSizeOn(columns);
+        float first = coord - BlockInset(columns);
+        for (int s = 0; s < size; s++)
+            LayoutLine(columns, block * size + s, first + s * _cellSize);
+    }
+
+    public float BlockOffset(bool columns, int block)
+    {
+        int size = GroupSizeOn(columns);
+        return LineOffset(columns, block * size) + BlockInset(columns);
+    }
+
+    // Footprint along each axis, including the extra space between column groups.
+    // With no grouping these are simply ColCount and RowCount cells wide.
+    public float ColumnExtent => LineCoord(true, colMax) - LineCoord(true, colMin) + _cellSize;
+    public float RowExtent => LineCoord(false, rowMax) - LineCoord(false, rowMin) + _cellSize;
 
     public Vector3 LocalOf(int visRow, int visCol) =>
         new Vector3(LineCoord(true, visCol), 0f, LineCoord(false, visRow));
@@ -85,8 +160,8 @@ public class CreateSheet : MonoBehaviour
 
     public void Build(DataSource data, Material material,
         int rMin, int rMax, int cMin, int cMax,
-        float cellSize, float height, float baseY, float cubeSide, Func<int, int, Color> topOf,
-        SheetLabelStyle labels)
+        float cellSize, float groupGap, float height, float baseY, float cubeSide,
+        Func<int, int, Color> topOf, SheetLabelStyle labels)
     {
         if (data == null) return;
 
@@ -97,6 +172,8 @@ public class CreateSheet : MonoBehaviour
         rowMin = rMin; rowMax = rMax; colMin = cMin; colMax = cMax;
         _material = material;
         _cellSize = cellSize;
+        _groupSize = data.ColumnGroupSize;
+        _groupGap = _groupSize > 1 ? groupGap : 0f;
         _height = height;
         _baseY = baseY;
 
@@ -156,7 +233,7 @@ public class CreateSheet : MonoBehaviour
         FitBounds();
 
         if (_labels == null) _labels = new SheetLabels(transform);
-        _labels.Rebuild(data, rMin, rMax, cMin, cMax, cellSize, cubeSide, baseY, labels);
+        _labels.Rebuild(data, rMin, rMax, cMin, cMax, cellSize, _groupGap, cubeSide, baseY, labels);
     }
 
     public void Repaint(DataSource data, Func<int, int, Color> topOf)

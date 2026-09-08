@@ -19,6 +19,8 @@ public class ManageSheets : MonoBehaviour
     [Range(0.005f, 0.15f)] public float cubeSide = 0.025f;
     [Tooltip("Clear space between neighbouring bars, in metres.")]
     [Range(0f, 0.15f)] public float cubeGap = 0.02f;
+    [Tooltip("Extra space between column groups, in metres. Only used when the dataset pairs its columns.")]
+    [Range(0f, 0.2f)] public float groupGap = 0.03f;
     [Tooltip("Height of the full value range, in metres.")]
     [Range(0.02f, 1f)] public float maximumHeight = 0.25f;
 
@@ -62,6 +64,7 @@ public class ManageSheets : MonoBehaviour
     private int _rowCount;
     private int _colCount;
     private float _cellSize;
+    private float _groupGap;
     private float _baseY;
 
     private bool _placementPending = true;
@@ -167,6 +170,7 @@ public class ManageSheets : MonoBehaviour
         if (_rowCount == 0 || _colCount == 0) { ClearProjection(); ClearSheets(); return; }
 
         _cellSize = cubeSide + cubeGap;
+        _groupGap = data.ColumnGroupSize > 1 ? groupGap : 0f;
         _baseY = data.ZeroFraction * maximumHeight;
 
         EnsureRoot();
@@ -194,7 +198,7 @@ public class ManageSheets : MonoBehaviour
             lineSnapshot = null;
             CreateSheet root = NewSheet();
             root.Build(data, cubeMaterial, 0, maxRow, 0, maxCol,
-                _cellSize, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
+                _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
             root.PlayGrow(GrowDuration());
             _sheets.Add(root);
             ReportPieces();
@@ -258,7 +262,7 @@ public class ManageSheets : MonoBehaviour
     private void RebuildSheet(CreateSheet sheet)
     {
         sheet.Build(_bound, cubeMaterial, sheet.rowMin, sheet.rowMax, sheet.colMin, sheet.colMax,
-            _cellSize, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
+            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
     }
 
     public CreateSheet SheetAt(int visRow, int visCol)
@@ -327,14 +331,14 @@ public class ManageSheets : MonoBehaviour
         float deltaB = CreateSheet.Center(boundary + 1, pMax, _cellSize) - parentCenter + half;
 
         sheet.Build(_bound, cubeMaterial, aRowMin, aRowMax, aColMin, aColMax,
-            _cellSize, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
+            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
         sheet.transform.localPosition = parentPos + SliceOffset(parentRot, parentScale, columns, deltaA);
 
         CreateSheet b = NewSheet();
         b.transform.localRotation = parentRot;
         b.transform.localScale = parentScale;
         b.Build(_bound, cubeMaterial, bRowMin, bRowMax, bColMin, bColMax,
-            _cellSize, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
+            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
         b.transform.localPosition = parentPos + SliceOffset(parentRot, parentScale, columns, deltaB);
         _sheets.Add(b);
         ReportPieces();
@@ -371,7 +375,7 @@ public class ManageSheets : MonoBehaviour
         RemoveSheet(b);
 
         a.Build(_bound, cubeMaterial, r.pRowMin, r.pRowMax, r.pColMin, r.pColMax,
-            _cellSize, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
+            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
         a.transform.localPosition = r.pLocalPos;
 
         RebuildProjection();
@@ -807,7 +811,7 @@ public class ManageSheets : MonoBehaviour
 
         CreateSheet view = p.view;
         view.Build(_bound, cubeMaterial, visRow, visRow, visCol, visCol,
-            _cellSize, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
+            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
         view.SetPickable(false);
 
         return PlaceProjection(p);
@@ -832,7 +836,7 @@ public class ManageSheets : MonoBehaviour
         }
 
         view.Build(_bound, cubeMaterial, rMin, rMax, cMin, cMax,
-            _cellSize, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
+            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
         view.SetPickable(false);
 
         return PlaceProjection(p);

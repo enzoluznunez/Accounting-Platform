@@ -184,6 +184,10 @@ public sealed class ListDatasets : AgenticTool {
     {
         if (data == null) return null;
 
+        // On a grouped axis the metric is what the model addresses, so edits read
+        // back in the same words they were asked for.
+        if (data.IsGrouped(columns)) return data.GroupTitleOfData(columns, dataIndex);
+
         IReadOnlyList<string> titles = columns ? data.ColumnTitles : data.RowTitles;
         return dataIndex >= 0 && dataIndex < titles.Count ? titles[dataIndex] : null;
     }

@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class SortTool : AxisTool
+public class SortTool : Tool
 {
     public float reflowSmoothing = 18f;
 
@@ -10,10 +10,11 @@ public class SortTool : AxisTool
 
     private SortLineProxy _held;
     private CreateSheet _dragSheet;
-    private int _dragLine = -1;
+    private bool _dragColumns;
+    private int _dragBlock = -1;
     private int _dragTarget;
-    private int _lineMin;
-    private int _lineMax;
+    private int _blockMin;
+    private int _blockMax;
 
     protected override ToolType Kind => ToolType.Sort;
 
@@ -41,12 +42,6 @@ public class SortTool : AxisTool
         RebuildProxies();
     }
 
-    protected override void OnOptionChanged()
-    {
-        CancelDrag();
-        RebuildProxies();
-    }
-
     protected override void OnActiveChanged(bool active)
     {
         CancelDrag();
@@ -66,9 +61,8 @@ public class SortTool : AxisTool
         if (_held != null) CancelDrag();
         ClearProxies();
 
-        if (!Active || !HasOption || sheetManager == null || !sheetManager.IsBuilt) return;
+        if (!Active || sheetManager == null || !sheetManager.IsBuilt) return;
 
-        bool columns = Axis == SliceAxis.Column;
         IReadOnlyList<CreateSheet> sheets = sheetManager.Sheets;
 
         for (int i = 0; i < sheets.Count; i++)
@@ -76,12 +70,16 @@ public class SortTool : AxisTool
             CreateSheet sheet = sheets[i];
             if (sheet == null || !sheet.IsBuilt) continue;
 
-            int min = columns ? sheet.colMin : sheet.rowMin;
-            int max = columns ? sheet.colMax : sheet.rowMax;
-            for (int line = min; line <= max; line++)
+            for (int axis = 0; axis < 2; axis++)
             {
-                SortLineProxy proxy = SortLineProxy.Create(sheet, columns, line, sheetManager.Height);
-                if (proxy != null) _proxies.Add(proxy);
+                bool columns = axis == 1;
+                int min = sheet.BlockMin(columns);
+                int max = sheet.BlockMax(columns);
+                for (int block = min; block <= max; block++)
+                {
+                    SortLineProxy proxy = SortLineProxy.Create(sheet, columns, block, sheetManager.Height);
+                    if (proxy != null) _proxies.Add(proxy);
+                }
             }
         }
     }
@@ -102,7 +100,7 @@ public class SortTool : AxisTool
 
     private void Update()
     {
-        if (!Active || !HasOption || sheetManager == null) return;
+        if (!Active || sheetManager == null) return;
 
         if (_held != null && !_held.IsGrabbed) { CommitDrag(); return; }
 
@@ -114,11 +112,11 @@ public class SortTool : AxisTool
             if (_held == null) return;
         }
 
-        bool columns = Axis == SliceAxis.Column;
+        bool columns = _dragColumns;
         float dragged = _held.Coord;
 
         _dragTarget = Mathf.Clamp(
-            Mathf.RoundToInt(_dragSheet.LineFraction(columns, dragged)), _lineMin, _lineMax);
+            Mathf.RoundToInt(_dragSheet.BlockFraction(columns, dragged)), _blockMin, _blockMax);
 
         Reflow(dragged);
     }
@@ -128,45 +126,46 @@ public class SortTool : AxisTool
         CreateSheet sheet = proxy.sheet;
         if (sheet == null) return;
 
-        bool columns = Axis == SliceAxis.Column;
+        _dragColumns = proxy.columns;
+        bool columns = _dragColumns;
 
         _dragSheet = sheet;
-        _lineMin = columns ? sheet.colMin : sheet.rowMin;
-        _lineMax = columns ? sheet.colMax : sheet.rowMax;
-        _dragLine = proxy.line;
-        _dragTarget = _dragLine;
+        _blockMin = sheet.BlockMin(columns);
+        _blockMax = sheet.BlockMax(columns);
+        _dragBlock = proxy.block;
+        _dragTarget = _dragBlock;
         _held = proxy;
     }
 
     private void Reflow(float dragged)
     {
         float t = 1f - Mathf.Exp(-reflowSmoothing * Time.deltaTime);
-        bool columns = Axis == SliceAxis.Column;
+        bool columns = _dragColumns;
 
-        for (int line = _lineMin; line <= _lineMax; line++)
+        for (int block = _blockMin; block <= _blockMax; block++)
         {
-            if (line == _dragLine)
+            if (block == _dragBlock)
             {
-                _dragSheet.LayoutLine(columns, line, dragged);
+                _dragSheet.LayoutBlock(columns, block, dragged);
                 continue;
             }
 
-            float goal = _dragSheet.LineCoord(columns, DisplaySlot(line, _dragLine, _dragTarget));
-            float now = _dragSheet.LineOffset(columns, line);
-            _dragSheet.LayoutLine(columns, line, Mathf.Lerp(now, goal, t));
+            float goal = _dragSheet.BlockCoord(columns, DisplaySlot(block, _dragBlock, _dragTarget));
+            float now = _dragSheet.BlockOffset(columns, block);
+            _dragSheet.LayoutBlock(columns, block, Mathf.Lerp(now, goal, t));
         }
     }
 
     private void CommitDrag()
     {
-        int from = _dragLine;
+        int from = _dragBlock;
         int target = _dragTarget;
         CreateSheet sheet = _dragSheet;
 
         _held = null;
         ClearDrag();
 
-        if (!MoveLine(Axis == SliceAxis.Column, from, target, sheet)) RestLayout(sheet);
+        if (!MoveLine(_dragColumns, from, target, sheet)) RestLayout(sheet);
         RebuildProxies();
     }
 
@@ -202,7 +201,7 @@ public class SortTool : AxisTool
 
     public bool SetOrder(bool columns, IReadOnlyList<int> targetOrder)
     {
-        if (!Active || !HasOption) return false;
+        if (!Active) return false;
 
         DataSource src = Scene.Data;
         if (src == null || targetOrder == null || targetOrder.Count == 0) return false;
@@ -213,16 +212,22 @@ public class SortTool : AxisTool
         var preOrder = new List<int>(live);
         DataSource.SortMode preMode = columns ? src.ColumnSortMode : src.RowSortMode;
 
-        var steps = PlanSteps(preOrder, targetOrder);
+        // Plan and walk in block space so a grouped axis steps a whole metric at a
+        // time; the recorded order stays line-level, so undo is unchanged.
+        int size = src.GroupSize(columns);
+        List<int> preBlocks = Blocks(preOrder, size);
+        List<int> targetBlocks = Blocks(targetOrder, size);
+
+        var steps = PlanSteps(preBlocks, targetBlocks);
         if (steps.Count == 0) return false;
 
         int changed = 0;
-        for (int i = 0; i < targetOrder.Count && i < preOrder.Count; i++)
-            if (preOrder[i] != targetOrder[i]) changed++;
+        for (int i = 0; i < targetBlocks.Count && i < preBlocks.Count; i++)
+            if (preBlocks[i] != targetBlocks[i]) changed++;
         LastReorderedLines = changed;
 
         ManageDatasets.ActiveEdits.PushReorder(columns, preOrder, preMode, changed);
-        Report($"set the order of {changed} {(columns ? "columns" : "rows")}");
+        Report($"set the order of {changed} {DataSource.GroupNoun(src, columns)}s");
 
         var final = new List<int>(targetOrder);
         bool stepwise = sheetManager != null && sheetManager.AgentMotionAnimates
@@ -241,6 +246,13 @@ public class SortTool : AxisTool
         };
         _sequence = StartCoroutine(WalkOrder(src, columns, steps, final));
         return true;
+    }
+
+    private static List<int> Blocks(IReadOnlyList<int> order, int size)
+    {
+        var blocks = new List<int>((order.Count + size - 1) / size);
+        for (int i = 0; i < order.Count; i += size) blocks.Add(order[i]);
+        return blocks;
     }
 
     private static void Apply(DataSource src, bool columns, IReadOnlyList<int> order)
@@ -273,15 +285,16 @@ public class SortTool : AxisTool
 
     private IEnumerator WalkOrder(DataSource src, bool columns, List<OrderStep> steps, List<int> final)
     {
+        int size = src.GroupSize(columns);
         for (int i = 0; i < steps.Count; i++)
         {
             OrderStep step = steps[i];
             IReadOnlyList<int> live = columns ? src.ColumnOrder : src.RowOrder;
             int at = -1;
-            for (int v = 0; v < live.Count; v++) if (live[v] == step.key) { at = v; break; }
+            for (int b = 0; b * size < live.Count; b++) if (live[b * size] == step.key) { at = b; break; }
             if (at < 0 || at == step.pos) continue;
 
-            if (columns) src.MoveColumn(at, step.pos);
+            if (columns) src.MoveColumn(at * size, step.pos * size);
             else src.MoveRow(at, step.pos);
 
             if (sheetManager != null) yield return sheetManager.WaitForReflow();
@@ -294,43 +307,48 @@ public class SortTool : AxisTool
         Apply(src, columns, final);
     }
 
+    // 'from' and 'to' are block positions: whole metrics on a grouped axis, single
+    // lines otherwise.
     public bool MoveLine(bool columns, int from, int to, CreateSheet piece)
     {
-        if (!Active || !HasOption) return false;
+        if (!Active) return false;
 
         DataSource src = Scene.Data;
         if (src == null || from == to) return false;
 
+        int size = src.GroupSize(columns);
         IReadOnlyList<int> order = columns ? src.ColumnOrder : src.RowOrder;
-        if (from < 0 || from >= order.Count || to < 0 || to >= order.Count) return false;
+        int blocks = order.Count / size;
+        if (from < 0 || from >= blocks || to < 0 || to >= blocks) return false;
 
         var preOrder = new List<int>(order);
         DataSource.SortMode preMode = columns ? src.ColumnSortMode : src.RowSortMode;
 
-        int lineMin = piece == null ? 0 : (columns ? piece.colMin : piece.rowMin);
+        int blockMin = piece == null ? 0 : (columns ? piece.colMin : piece.rowMin) / size;
         string where = piece != null ? $" in piece {piece.sheetId}" : "";
 
-        string line = DataSource.LabelAt(src, columns, from);
+        string what = DataSource.GroupLabelAt(src, columns, from);
+        string noun = DataSource.GroupNoun(src, columns) + "s";
 
         var postOrder = new List<int>(preOrder);
-        int moved = postOrder[from];
-        postOrder.RemoveAt(from);
-        postOrder.Insert(to, moved);
+        List<int> moved = postOrder.GetRange(from * size, size);
+        postOrder.RemoveRange(from * size, size);
+        postOrder.InsertRange(to * size, moved);
 
         string arrangement = "";
-        if (postOrder.Count <= 40)
+        if (blocks <= 40)
         {
-            List<string> names = DataSource.TitlesFor(src, columns, postOrder);
-            arrangement = $"; the {(columns ? "columns" : "rows")} now run: {string.Join(", ", names)}";
+            List<string> names = DataSource.BlockTitlesFor(src, columns, postOrder);
+            arrangement = $"; the {noun} now run: {string.Join(", ", names)}";
         }
 
-        Report($"moved {line} from position {from - lineMin + 1} to {to - lineMin + 1}{where}{arrangement}");
+        Report($"moved {what} from position {from - blockMin + 1} to {to - blockMin + 1}{where}{arrangement}");
 
         if (StateChannel.UserDriven) StalePositions.MarkDirty(columns);
 
         ManageDatasets.ActiveEdits.PushSort(columns, preOrder, preMode, from, to);
 
-        if (columns) src.MoveColumn(from, to);
+        if (columns) src.MoveColumn(from * size, to * size);
         else src.MoveRow(from, to);
         return true;
     }
@@ -346,7 +364,7 @@ public class SortTool : AxisTool
     private void ClearDrag()
     {
         _dragSheet = null;
-        _dragLine = -1;
+        _dragBlock = -1;
     }
 
     private void RestLayout(CreateSheet sheet)

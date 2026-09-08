@@ -77,10 +77,16 @@ public class Parser : DataSource
 
         string[] lines = csvText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
 
+        int groupSize = 1;
         List<List<string>> grid = new List<List<string>>(lines.Length);
         foreach (string line in lines)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
+            if (grid.Count == 0 && line.TrimStart().StartsWith("#", StringComparison.Ordinal))
+            {
+                ReadDirective(line, ref groupSize);
+                continue;
+            }
             grid.Add(ParseCSVLine(line));
         }
 
@@ -94,6 +100,14 @@ public class Parser : DataSource
         if (header.Count > 0) SetAxisTitles(header[0]);
         for (int c = 1; c < header.Count; c++)
             _columnTitles.Add(header[c].Trim());
+
+        if (groupSize > 1 && _columnTitles.Count % groupSize != 0)
+        {
+            Debug.LogWarning($"[Parser:{name}] '#group {groupSize}' does not divide the " +
+                             $"{_columnTitles.Count} columns; loading them ungrouped.");
+            groupSize = 1;
+        }
+        SetColumnGroupSize(groupSize);
 
         int skipped = 0;
         for (int g = grid.Count - 1; g >= 1; g--)
@@ -136,7 +150,7 @@ public class Parser : DataSource
         EnsureOrders();
 
         Debug.Log($"[Parser:{name}] Loaded grid {rowCount} rows x {colCount} cols " +
-                  $"(range [{_globalMin}, {_globalMax}])");
+                  $"({ColumnGroupSize} col(s) per group, normalised range [{_globalMin}, {_globalMax}])");
         RaiseDataLoaded();
         ReportResult(true, null);
     }
@@ -156,6 +170,23 @@ public class Parser : DataSource
         int i = 0;
         while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
         return i < text.Length && text[i] == '<';
+    }
+
+    // Directive lines sit above the header and configure the grid. Only
+    // '#group N' is understood; anything else is ignored so a file may carry
+    // comments without becoming a row.
+    private void ReadDirective(string line, ref int groupSize)
+    {
+        string body = line.TrimStart().TrimStart('#').Trim();
+        if (!body.StartsWith("group", StringComparison.OrdinalIgnoreCase)) return;
+
+        string value = body.Substring("group".Length).Trim();
+        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int size) && size > 1)
+        {
+            groupSize = size;
+            return;
+        }
+        Debug.LogWarning($"[Parser:{name}] Ignored unreadable directive '{line.Trim()}'.");
     }
 
     private void SetAxisTitles(string corner)
@@ -195,6 +226,7 @@ public class Parser : DataSource
         _rawText = null;
         _globalMin = 0f;
         _globalMax = 1f;
+        SetColumnGroupSize(1);
     }
 
     private static List<string> ParseCSVLine(string line)

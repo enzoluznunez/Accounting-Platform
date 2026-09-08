@@ -74,8 +74,12 @@ public sealed class CallDetailTool : AgenticTool<CallDetailTool.Args> {
 
             foreach (Cell cell in cells) {
                 if (!TryResolveLine(cell.row, false, rowMin, rowMax, result, out int vr)) return;
-                if (!TryResolveLine(cell.column, true, colMin, colMax, result, out int vc)) return;
-                wanted.Add(new ResolvedTarget { visRow = vr, visCol = vc, hasRow = true, hasCol = true });
+                if (!TryResolveLine(cell.column, true, colMin, colMax, result, out int block)) return;
+
+                // A named metric raises each of its years.
+                BlockSpan(true, block, colMin, colMax, out int lo, out int hi);
+                for (int vc = lo; vc <= hi; vc++)
+                    wanted.Add(new ResolvedTarget { visRow = vr, visCol = vc, hasRow = true, hasCol = true });
             }
         }
 
@@ -89,8 +93,14 @@ public sealed class CallDetailTool : AgenticTool<CallDetailTool.Args> {
                 if (raised.Count > 0) result["projected"] = raised;
                 return false;
             }
-            raised.Add(new Dictionary<string, object> {
-                { "row", cell.visRow - rowMin + 1 }, { "column", cell.visCol - colMin + 1 } });
+            var where = new Dictionary<string, object> {
+                { "row", cell.visRow - rowMin + 1 },
+                { "column", Scene.Data != null
+                    ? Scene.Data.GroupOf(true, cell.visCol) - Scene.Data.GroupOf(true, colMin) + 1
+                    : cell.visCol - colMin + 1 } };
+            string year = Scene.Data != null ? Scene.Data.SeriesTitleAt(true, cell.visCol) : null;
+            if (year != null) where["year"] = year;
+            raised.Add(where);
             return true;
         });
         if (!ok) return;
@@ -114,7 +124,8 @@ public sealed class CallDetailTool : AgenticTool<CallDetailTool.Args> {
         int count = of.count ?? 1;
 
         if (!TryResolveScope(of.rows, false, rowMin, rowMax, result, out List<int> rows)) return false;
-        if (!TryResolveScope(of.columns, true, colMin, colMax, result, out List<int> cols)) return false;
+        if (!TryResolveScope(of.columns, true, colMin, colMax, result, out List<int> colBlocks)) return false;
+        List<int> cols = ExpandBlocks(true, colBlocks, colMin, colMax);
 
         var hits = new List<KeyValuePair<double, ResolvedTarget>>();
         foreach (int r in rows)

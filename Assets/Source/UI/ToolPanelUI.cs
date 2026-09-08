@@ -53,7 +53,7 @@ public class ToolPanelUI : PanelUI
             case ToolType.Detail:
                 return "The Detail tool lets you pull a single cube out of the sheet to see it enlarged.";
             case ToolType.Slice:
-                return "The Slice tool lets you break a sheet apart along its columns or rows by touching them.";
+                return "The Slice tool lets you break a sheet apart by touching the gap between two columns or two rows.";
             case ToolType.Color:
                 return "The Color tool lets you change a sheet's color by selecting a color and touching the bars.";
             case ToolType.Move:
@@ -63,9 +63,9 @@ public class ToolPanelUI : PanelUI
             case ToolType.Scale:
                 return "The Scale tool lets you resize a sheet by grabbing it with both hands and moving them apart or together.";
             case ToolType.Sort:
-                return "The Sort tool lets you grab a row or column and slide it to reorder the sheet.";
+                return "The Sort tool lets you pinch a row or column and slide it to reorder the sheet. Grab beside its label, or anywhere along it.";
             case ToolType.Profile:
-                return "The Profile tool lets you touch a row or column to lift it out of the sheet and read its statistics.";
+                return "The Profile tool lets you press a cube and sweep along a row or column to lift it out and read its statistics.";
             default:
                 return string.Empty;
         }
@@ -758,10 +758,6 @@ public class ToolPanelUI : PanelUI
 
     private GameObject GetToolContent(ToolType tool) =>
         _toolContents.TryGetValue(tool, out GameObject go) ? go : null;
-
-    public ButtonList AddToggleRow(ToolType tool, string rowName,
-        params (string name, string label, UnityEngine.Events.UnityAction onClick)[] buttons) =>
-        AddToggleRowIn(GetToolContent(tool), rowName, buttons);
 
     private ButtonList AddToggleRowIn(GameObject content, string rowName,
         params (string name, string label, UnityEngine.Events.UnityAction onClick)[] buttons)

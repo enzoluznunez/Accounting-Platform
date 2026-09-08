@@ -127,10 +127,8 @@ public sealed class CallColorTool : AgenticTool<CallColorTool.Args> {
             if (args.targets != null && args.targets.Length > 0) targets.AddRange(args.targets);
             else targets.Add(new Target { row = args.row, column = args.column });
 
-            foreach (Target t in targets) {
-                if (!ResolveTarget(t, mgr, result, out ResolvedTarget resolved)) return;
-                wanted.Add(resolved);
-            }
+            foreach (Target t in targets)
+                if (!ResolveTarget(t, mgr, result, wanted)) return;
         }
 
         int total = 0;
@@ -163,9 +161,8 @@ public sealed class CallColorTool : AgenticTool<CallColorTool.Args> {
     }
 
     private static bool ResolveTarget(Target t, ManageSheets mgr,
-        Dictionary<string, object> result, out ResolvedTarget resolved) {
+        Dictionary<string, object> result, List<ResolvedTarget> into) {
 
-        resolved = default;
         string row = t.row, column = t.column;
         bool hasRow = !string.IsNullOrEmpty(row);
         bool hasCol = !string.IsNullOrEmpty(column);
@@ -185,11 +182,20 @@ public sealed class CallColorTool : AgenticTool<CallColorTool.Args> {
             hasCol = false; hasRow = true;
         }
 
-        int visRow = -1, visCol = -1;
+        int visRow = -1;
         if (hasRow && !TryResolveLine(row, false, 0, mgr.RowCount - 1, result, out visRow)) return false;
-        if (hasCol && !TryResolveLine(column, true, 0, mgr.ColCount - 1, result, out visCol)) return false;
 
-        resolved = new ResolvedTarget { visRow = visRow, visCol = visCol, hasRow = hasRow, hasCol = hasCol };
+        if (!hasCol) {
+            into.Add(new ResolvedTarget { visRow = visRow, hasRow = true });
+            return true;
+        }
+
+        if (!TryResolveLine(column, true, 0, mgr.ColCount - 1, result, out int block)) return false;
+        BlockSpan(true, block, 0, mgr.ColCount - 1, out int lo, out int hi);
+
+        // A named metric covers each of its years.
+        for (int c = lo; c <= hi; c++)
+            into.Add(new ResolvedTarget { visRow = visRow, visCol = c, hasRow = hasRow, hasCol = true });
         return true;
     }
 
@@ -220,12 +226,15 @@ public sealed class CallColorTool : AgenticTool<CallColorTool.Args> {
         }
 
         if (!TryResolveScope(w.rows, false, 0, mgr.RowCount - 1, result, out List<int> rows)) return false;
-        if (!TryResolveScope(w.columns, true, 0, mgr.ColCount - 1, result, out List<int> cols)) return false;
+        if (!TryResolveScope(w.columns, true, 0, mgr.ColCount - 1, result, out List<int> colBlocks)) return false;
+        List<int> cols = ExpandBlocks(true, colBlocks, 0, mgr.ColCount - 1);
+
+        bool columnsScoped = w.columns != null && w.columns.Length > 0;
 
         List<int> pickedLines = null;
         bool pickedColumns = false;
         if (hasLine) {
-            if (!PickScopeLines(w.ofLine, data, rows, cols, result, out pickedColumns, out pickedLines)) return false;
+            if (!PickScopeLines(w.ofLine, data, rows, cols, columnsScoped, result, out pickedColumns, out pickedLines)) return false;
             if (pickedColumns) cols = pickedLines;
             else rows = pickedLines;
         }
@@ -288,7 +297,7 @@ public sealed class CallColorTool : AgenticTool<CallColorTool.Args> {
     }
 
     private static bool PickScopeLines(OfLine of, DataSource data, List<int> rows, List<int> cols,
-        Dictionary<string, object> result, out bool columns, out List<int> picked) {
+        bool columnsScoped, Dictionary<string, object> result, out bool columns, out List<int> picked) {
 
         columns = false;
         picked = null;
@@ -298,6 +307,21 @@ public sealed class CallColorTool : AgenticTool<CallColorTool.Args> {
         else if (axis != "rows" && axis != "row") {
             result["error"] = "'ofLine' needs an 'axis' of 'rows' or 'columns'.";
             return false;
+        }
+
+        // Judging one line against another only means something within a single
+        // metric; across metrics the units differ and the comparison is empty.
+        if (data != null && data.IsGrouped(true)) {
+            if (columns) {
+                result["error"] = "The metrics are in different units, so 'ofLine' cannot judge one against another " +
+                    "on the column axis. Name the metric in 'columns' and judge the rows instead.";
+                return false;
+            }
+            if (!columnsScoped) {
+                result["error"] = "Each row spans several metrics in different units, so there is no single number " +
+                    "to judge it by. Add 'columns' naming the metric, such as columns: ['Revenue'].";
+                return false;
+            }
         }
 
         if (!TryParseMeasure(of.measure, "ofLine", result, out string measure)) return false;

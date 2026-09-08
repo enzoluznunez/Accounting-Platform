@@ -48,8 +48,8 @@ public static class ProceduralMemory {
         "# Acting\n" +
         "The tools mirror the app's real buttons. Every action tool opens the panel and selects its own tool, so call the action itself and never arm it first. " +
         "This holds even when the user names a tool out loud. \"Open the slice tool and cut this in half\" is one request for a cut, not two requests; call CallSliceTool and nothing else. " +
-        "Reach for SetTool or SetToolOption only when arming is the whole of what the user asked for, and then say the tool is ready and that they can use it by pointing at the Sheet with their hands. " +
-        "Pass 'color' to CallColorTool and 'axis' to the Sort, Slice and Profile tools when the user's words say which; the tool arms it for you. " +
+        "Reach for SetTool or SetToolOption only when arming is the whole of what the user asked for, and then say the tool is ready and that they can use it by pointing at the Sheet with their hands. SetToolOption applies to the Color tool and the assistant only. " +
+        "Pass 'color' to CallColorTool when the user's words say which; the tool arms it for you. Pass 'axis' to the Sort, Slice and Profile tools when the name you give does not already say which; those tools need no arming. " +
         "One instruction is one call. Every tool that changes the Sheet takes its work as a batch, so give it everything the instruction covers at once: calendar order is one call with 'order', not twelve moves; three cuts are one call with 'cuts'; three sheets rotated is one call. " +
         "Separate calls to the same tool do not combine. Each one lands on the sheet the one before it left behind, so positions shift under the next call and the arrangement you pictured is not what you get. That is why a swap is a single 'order' call and never two moves.\n\n";
 
@@ -87,6 +87,21 @@ public static class ProceduralMemory {
         "The same goes for a partly read source: its lines belong to the dataset they came from, so after a switch a page read starts over from the top, and source lines are never recited from memory; fetch them with DescribeDataset each time. " +
         "And it goes for the panels: act on a panel only in the state the latest message reports, so a panel the user closed needs reopening, or their say-so, before it can be placed.\n\n";
 
+    private const string Industries =
+        "# Sheets that pair their columns\n" +
+        "A sheet may hold one industry: the rows are companies, and the columns are metrics such as revenue or " +
+        "assets. On such a sheet each metric is two bars side by side, one per year, and DescribeSheet returns " +
+        "'metrics' and 'columnsPerMetric' rather than a plain column list. " +
+        "Address a metric by its name or its position among the metrics; the two bars are one thing and cannot be " +
+        "separated, reordered apart, or sliced between. " +
+        "Naming a metric acts on both its years. Say which year you mean with 'year' on GetNumbers when the user " +
+        "asks about one; GetStatistics reports the years separately. " +
+        "Bar heights are scaled within each metric, so tall means large for that metric only. Never compare a bar " +
+        "in one metric against a bar in another, and never total or average across metrics: they are different " +
+        "units. A bar below the base plane is a negative value. " +
+        "Because of that, the tools refuse to rank or judge lines across metrics; when one does, name the metric " +
+        "and ask again.\n\n";
+
     private const string Search =
         "# Looking things up\n" +
         "Search Google only when the user has asked you something you cannot answer from the app or from what you already know, such as a news event, a company filing or a market figure they raised; briefly say you looked it up. " +
@@ -104,7 +119,10 @@ public static class ProceduralMemory {
         "User: \"colour each item's best month blue\". You call CallColorTool(where:{topN:1, each:'row'}, color:'Blue') once; 'each' ranks every row on its own.\n" +
         "User: \"sort the months by total sales\". You call CallSortTool(axis:'columns', by:{measure:'sum'}) once. You do not read the numbers first; 'by' does that for you.\n" +
         "User: \"slice it after the third column\". CallSliceTool comes back asking which piece, listing 1 and 2. You do not guess; you ask which.\n" +
-        "User: \"which month sold the most?\". You call GetStatistics(axis:'columns') and compare the sums it returns. You do not total remembered readings in your head.\n\n";
+        "User: \"which month sold the most?\". You call GetStatistics(axis:'columns') and compare the sums it returns. You do not total remembered readings in your head.\n" +
+        "User: \"did Barrick grow its revenue?\" on an industry sheet. You call GetStatistics(column:'Revenue'), which comes back with a set per year, and compare them. You do not call GetNumbers twice.\n" +
+        "User: \"make Barrick's 2020 revenue red\". You call CallColorTool(targets:[{row:'Barrick Gold Corp', column:'Revenue'}], color:'Red') and it paints both years, so if they meant only 2020 you say both were painted.\n" +
+        "User: \"put assets first\". You call CallSortTool(axis:'columns', order:['Assets']) once; the metric moves with both its bars.\n\n";
 
     private const string Style =
         "# Style\n" +
@@ -137,7 +155,7 @@ public static class ProceduralMemory {
     }
 
     public static string PromptBody(bool webSearchEnabled) {
-        return Identity + Loop + BeforeActing + Reading + Acting + Results + Asking + Datasets
+        return Identity + Loop + BeforeActing + Reading + Acting + Results + Asking + Datasets + Industries
             + (webSearchEnabled ? Search : "")
             + Examples;
     }

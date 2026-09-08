@@ -4,7 +4,7 @@ using Google.GenAI.Types;
 public sealed class CallSliceTool : AgenticTool<CallSliceTool.Args> {
 
     public class Args {
-        [Doc("Cut just after this column/row of the target piece: its name, or its 1-based position."), Optional]
+        [Doc("Cut just after this metric/row of the target piece: its name, or its 1-based position."), Optional]
         public string after;
         [Doc("Make several cuts in one go: each a name or 1-based position to cut after. Use this instead of calling repeatedly, because every cut renumbers the pieces."), Optional]
         public string[] cuts;
@@ -21,6 +21,8 @@ public sealed class CallSliceTool : AgenticTool<CallSliceTool.Args> {
         Description = "Cut a sheet piece, as if the user touched the cut line. Pass 'axis' when the name you give does " +
                       "not say which. On columns, after=N cuts between column N and N+1; on rows, between row N and " +
                       "N+1. Names work as well as numbers. " +
+                      "When the sheet pairs its columns a cut falls between whole metrics, never between a metric's " +
+                      "two years, and positions count metrics. " +
                       "Use 'cuts' to make several cuts at once and never call this " +
                       "repeatedly for one request: each cut renumbers the pieces, so a second call would be aiming at a " +
                       "layout that no longer exists. " +
@@ -45,37 +47,49 @@ public sealed class CallSliceTool : AgenticTool<CallSliceTool.Args> {
         }
 
         string hint = many ? args.cuts[0] : args.after;
-        if (!EnsureAxisArmed(slice, "slice", args.axis, hint, result, out bool columns)) return;
+        if (!ResolveAxis("slice", args.axis, hint, result, out bool columns)) return;
         string axis = columns ? "columns" : "rows";
 
         if (!TryResolvePiece(args.sheet, result, "slice", out var mgr, out var sheet, out int pieceId)) return;
 
         int lineMin = columns ? sheet.colMin : sheet.rowMin;
         int lineMax = columns ? sheet.colMax : sheet.rowMax;
-        int span = lineMax - lineMin + 1;
+        var data = Scene.Data;
+        string what = DataSource.GroupNoun(data, columns);
+
+        // Cuts are chosen in whole blocks, so a paired axis is only ever cut
+        // between metrics.
+        int blockMin = data != null ? data.GroupOf(columns, lineMin) : lineMin;
+        int span = BlockCountIn(columns, lineMin, lineMax);
         if (span < 2) {
-            result["error"] = $"That piece has only one {(columns ? "column" : "row")}; it cannot be sliced that way.";
+            result["error"] = $"That piece has only one {what}; it cannot be sliced that way.";
             return;
         }
 
-        var lines = new List<int>();
+        var blocks = new List<int>();
         if (many) {
             if (!TryResolveLines(args.cuts, columns, lineMin, lineMax, result, out List<int> resolved)) return;
-            lines.AddRange(resolved);
+            blocks.AddRange(resolved);
         }
         else {
             if (!TryResolveLine(args.after, columns, lineMin, lineMax, result, out int one)) return;
-            lines.Add(one);
+            blocks.Add(one);
         }
 
-        string what = columns ? "column" : "row";
-        foreach (int line in lines)
-            if (line - lineMin + 1 > span - 1) {
+        foreach (int block in blocks)
+            if (block - blockMin + 1 > span - 1) {
                 result["error"] = $"Cannot cut after the last {what} of that piece.";
                 return;
             }
 
-        lines.Sort();
+        blocks.Sort();
+
+        // A cut lands after the block's final line.
+        var lines = new List<int>(blocks.Count);
+        for (int i = 0; i < blocks.Count; i++) {
+            BlockSpan(columns, blocks[i], lineMin, lineMax, out _, out int hi);
+            lines.Add(hi);
+        }
 
         var madeAt = new List<object>();
         var pieces = new List<object>();
@@ -83,14 +97,14 @@ public sealed class CallSliceTool : AgenticTool<CallSliceTool.Args> {
 
         bool ok = RunGrouped(lines.Count, i => {
             if (target == null) return true;
-            if (!slice.CutAt(target, lines[i], out SliceRecord record)) {
+            if (!slice.CutAt(columns, target, lines[i], out SliceRecord record)) {
                 result["error"] = madeAt.Count == 0
                     ? "The cut could not be made there."
                     : $"Made {madeAt.Count} cut(s), then one could not be made; the sheet is part-way through.";
                 if (madeAt.Count > 0) result["cutsMade"] = madeAt;
                 return false;
             }
-            madeAt.Add(lines[i] - lineMin + 1);
+            madeAt.Add(blocks[i] - blockMin + 1);
             pieces.Add(record.aId);
             target = mgr.SheetById(record.bId);
             return true;

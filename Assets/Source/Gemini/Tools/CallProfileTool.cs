@@ -49,7 +49,7 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
         var profile = Scene.Profile;
         if (profile == null) { result["error"] = "Profile tool not found in scene."; return; }
 
-        if (!EnsureAxisArmed(profile, "profile", args.axis, args.index, result, out bool columns)) return;
+        if (!ResolveAxis("profile", args.axis, args.index, result, out bool columns)) return;
 
         var mgr = Scene.Sheets;
         if (mgr == null || !mgr.IsBuilt) { result["error"] = "No sheet in scene."; return; }
@@ -75,19 +75,25 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
             wanted.Add(single);
         }
 
+        // 'wanted' holds blocks; a paired metric raises a strip for each of its years.
+        var data = Scene.Data;
+        int blockMin = data != null ? data.GroupOf(columns, lineMin) : lineMin;
+        List<int> lines = ExpandBlocks(columns, wanted, lineMin, lineMax);
+
         var raised = new List<object>();
-        bool ok = RunGrouped(wanted.Count, i => {
-            int line = wanted[i];
+        bool ok = RunGrouped(lines.Count, i => {
+            int line = lines[i];
             int vr = columns ? (rowMin + rowMax) / 2 : line;
             int vc = columns ? line : (colMin + colMax) / 2;
-            if (!profile.ShowProfile(vr, vc)) {
+            if (!profile.ShowProfile(columns, vr, vc)) {
                 result["error"] = raised.Count == 0
                     ? "That row or column could not be projected; it has no values, or it is already projected."
                     : $"Raised {raised.Count}, then one could not be projected.";
                 if (raised.Count > 0) result["projected"] = raised;
                 return false;
             }
-            raised.Add(line - lineMin + 1);
+            object at = data != null ? data.GroupOf(columns, line) - blockMin + 1 : line - lineMin + 1;
+            if (!raised.Contains(at)) raised.Add(at);
             return true;
         });
         if (!ok) return;
@@ -102,6 +108,16 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
 
         var data = Scene.Data;
         if (data == null) { result["error"] = "No data source found in scene."; return false; }
+
+        // Ranking needs one measure in one unit. On a paired sheet the columns hold
+        // different metrics, so neither axis can be ranked this way: judging metrics
+        // against each other is meaningless, and judging a row means adding dollars
+        // to share counts.
+        if (data.IsGrouped(true)) {
+            result["error"] = "The metrics on this sheet are in different units, so there is no single number to " +
+                "judge lines by. Name the metric or row you want in 'index' instead.";
+            return false;
+        }
 
         if (!TryParseMeasure(of.measure, "of", result, out string measure)) return false;
         bool highest = !string.Equals(of.pick, "lowest", System.StringComparison.OrdinalIgnoreCase);

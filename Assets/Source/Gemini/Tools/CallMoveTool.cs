@@ -139,9 +139,9 @@ public sealed class CallMoveTool : AgenticTool<CallMoveTool.Args> {
         Transform t = piece.transform;
         Vector3 scale = t.lossyScale;
 
-        float halfColumns = piece.ColCount * mgr.CellSize * 0.5f * Mathf.Abs(scale.x);
+        float halfColumns = piece.ColumnExtent * 0.5f * Mathf.Abs(scale.x);
         float halfUp = mgr.Height * 0.5f * Mathf.Abs(scale.y);
-        float halfRows = piece.RowCount * mgr.CellSize * 0.5f * Mathf.Abs(scale.z);
+        float halfRows = piece.RowExtent * 0.5f * Mathf.Abs(scale.z);
 
         return Mathf.Abs(Vector3.Dot(worldDir, t.right)) * halfColumns
              + Mathf.Abs(Vector3.Dot(worldDir, t.up)) * halfUp

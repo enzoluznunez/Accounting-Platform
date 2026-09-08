@@ -13,6 +13,9 @@ public class ReadSheets : MonoBehaviour
         public int dataRow;
         public int dataCol;
         public Vector3 point;
+        public Vector3 tip;
+        public Vector3 wrist;
+        public Vector3 normal;
     }
 
     public event Action<Reading> OnHover;
@@ -78,4 +81,13 @@ public class ReadSheets : MonoBehaviour
         dataCol = cube.dataCol,
         point = point
     };
+
+    public static Reading Describe(SheetRaycast.Hit hit, Vector3 tip, Vector3 wrist)
+    {
+        Reading reading = Describe(hit.cube, hit.point);
+        reading.tip = tip;
+        reading.wrist = wrist;
+        reading.normal = hit.normal;
+        return reading;
+    }
 }

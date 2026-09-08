@@ -53,7 +53,11 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
         var data = datasets.Active;
         if (data != null && data.IsLoaded) {
             result["rowCount"] = data.RowCount;
-            result["columnCount"] = data.ColumnCount;
+            if (data.IsGrouped(true)) {
+                result["metricCount"] = data.GroupCount(true);
+                result["columnsPerMetric"] = new List<object>(data.SeriesTitles);
+            }
+            else result["columnCount"] = data.ColumnCount;
         }
         if (!alreadyActive)
             result["note"] = "Row and column numbers now refer to this dataset; call ListDatasets for its sheet ids before using numbers.";

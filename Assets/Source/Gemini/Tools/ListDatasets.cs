@@ -6,9 +6,10 @@ public sealed class ListDatasets : AgenticTool {
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "ListDatasets",
-        Description = "List the open datasets and what stands on each: 'name', 'active' (whether it is the dataset " +
-                      "currently open), 'sheets' (the ids of its sheet pieces) and 'edits' (the tool edits that " +
-                      "currently stand on it, newest first). " +
+        Description = "List the datasets and what stands on each: 'name', 'active' (whether it is the dataset " +
+                      "currently open), 'read' (false for an industry that is listed but has not been read yet; " +
+                      "SetDataset reads it), 'sheets' (the ids of its sheet pieces) and 'edits' (the tool edits " +
+                      "that currently stand on it, newest first). " +
                       "This is cheap and carries no row, column or value data; call DescribeSheet with an id for a " +
                       "sheet's titles, ranges, position and color, GetNumbers for its numbers, or DescribeDataset for the " +
                       "open dataset's raw source text. " +
@@ -27,9 +28,23 @@ public sealed class ListDatasets : AgenticTool {
             for (int i = datasets.DatasetCount - 1; i >= 0; i--) {
                 var dataset = datasets.Datasets[i];
                 bool active = i == datasets.ActiveIndex;
+
+                // An industry that has not been read yet has no sheet and no
+                // edits; saying so is the whole of what there is to report.
+                if (!dataset.loaded) {
+                    list.Add(new Dictionary<string, object> {
+                        { "name", string.IsNullOrEmpty(dataset.label) ? "dataset" : dataset.label },
+                        { "active", false },
+                        { "read", false },
+                        { "companies", dataset.companies }
+                    });
+                    continue;
+                }
+
                 list.Add(new Dictionary<string, object> {
                     { "name", string.IsNullOrEmpty(dataset.label) ? "dataset" : dataset.label },
                     { "active", active },
+                    { "read", true },
                     { "sheets", active ? ActiveSheetIds() : SheetIdsFromEdits(dataset.Edits) },
                     { "edits", DescribeStack(dataset.Edits, dataset.source, active) }
                 });
@@ -168,9 +183,9 @@ public sealed class ListDatasets : AgenticTool {
                     e["positionsMoved"] = Math.Abs(r.reorderTarget - r.reorderFrom);
                 }
                 break;
-            case EditKind.Detail:
-                e["row"] = DataTitle(data, false, r.projection.dataRow);
-                e["column"] = DataTitle(data, true, r.projection.dataCol);
+            case EditKind.Filter:
+                e["hidden"] = GroupTitles(data, r.filterPostHidden);
+                e["wasHidden"] = GroupTitles(data, r.filterPreHidden);
                 break;
             case EditKind.Profile:
                 e["direction"] = r.projection.isColumn ? "column" : "row";
@@ -178,6 +193,15 @@ public sealed class ListDatasets : AgenticTool {
                     r.projection.isColumn ? r.projection.dataCol : r.projection.dataRow);
                 break;
         }
+    }
+
+    private static List<object> GroupTitles(DataSource data, List<int> groups)
+    {
+        var names = new List<object>();
+        if (data == null || groups == null) return names;
+
+        for (int i = 0; i < groups.Count; i++) names.Add(data.DataGroupTitleAt(groups[i]));
+        return names;
     }
 
     private static string DataTitle(DataSource data, bool columns, int dataIndex)

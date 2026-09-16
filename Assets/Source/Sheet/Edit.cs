@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum EditKind { Slice, Move, Rotate, Scale, Color, Sort, Detail, Profile }
+public enum EditKind { Slice, Move, Rotate, Scale, Color, Sort, Filter, Profile }
 
 public struct MoveRecord
 {
@@ -15,9 +15,9 @@ public struct MoveRecord
     public float distance;
 }
 
+// Always a strip: one whole row or column raised above the sheet.
 public struct ProjectionRecord
 {
-    public bool isStrip;
     public bool isColumn;
     public int dataRow;
     public int dataCol;
@@ -58,6 +58,11 @@ public class Edit
 
     public int group;
 
+    // Which column groups were hidden before this filter, and after it. Undo puts
+    // the first back; a replay onto a freshly loaded dataset applies the second.
+    public List<int> filterPreHidden;
+    public List<int> filterPostHidden;
+
     public string colorName;
     public string colorHex;
     public List<ColorCell> colorStroke;
@@ -72,7 +77,7 @@ public class Edit
             case EditKind.Scale: return "scale";
             case EditKind.Color: return "color";
             case EditKind.Sort: return "sort";
-            case EditKind.Detail: return "detail";
+            case EditKind.Filter: return "filter";
             case EditKind.Profile: return "profile";
             default: return "edit";
         }
@@ -193,5 +198,22 @@ public class EditList : List<Edit>
     public void PushProjection(ProjectionRecord projection, EditKind kind) =>
         Push(new Edit { kind = kind, projection = projection });
 
+    public void PushFilter(IReadOnlyList<int> preHidden, IReadOnlyList<int> postHidden) =>
+        Push(new Edit
+        {
+            kind = EditKind.Filter,
+            filterPreHidden = preHidden != null ? new List<int>(preHidden) : new List<int>(),
+            filterPostHidden = postHidden != null ? new List<int>(postHidden) : new List<int>()
+        });
+
     public void DropKind(EditKind kind) => RemoveAll(e => e.kind == kind);
+
+    // A piece that no longer exists takes its records with it: the cut that made
+    // it, and anything since that moved it.
+    public void DropPiece(int sheetId)
+    {
+        if (RemoveAll(e => e.sheetId == sheetId ||
+                           (e.kind == EditKind.Slice && e.slice.bId == sheetId)) > 0)
+            RaiseChanged();
+    }
 }

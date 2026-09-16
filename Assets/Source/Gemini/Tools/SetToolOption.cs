@@ -17,7 +17,7 @@ public sealed class SetToolOption : AgenticTool {
                 Name = "SetToolOption",
                 Description = "Arm a tool's option before using it. For the Color tool the option is a color: " +
                               string.Join(", ", colorNames) + ". " +
-                              "The Slice, Sort, Profile, and Detail tools have no option; selecting them is enough. " +
+                              "The Slice, Sort, Profile, and Filter tools have no option; selecting them is enough. " +
                               "'none' clears the color and leaves the Color tool armed with nothing chosen. " +
                               "'assistant' sets how fast your own actions play out on screen: '" +
                               string.Join("', '", ToolPanelUI.AssistantSpeedLabels) +

@@ -449,7 +449,7 @@ public abstract class AgenticTool : Function {
         if (string.IsNullOrEmpty(s)) return false;
         switch (s.Trim().ToLowerInvariant()) {
             case "none": tool = ToolType.None; return true;
-            case "detail": tool = ToolType.Detail; return true;
+            case "filter": tool = ToolType.Filter; return true;
             case "slice": tool = ToolType.Slice; return true;
             case "color": case "colour": tool = ToolType.Color; return true;
             case "move": case "grab": tool = ToolType.Move; return true;

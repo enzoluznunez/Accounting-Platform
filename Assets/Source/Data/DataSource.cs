@@ -16,12 +16,17 @@ public abstract class DataSource : MonoBehaviour
     public string ColumnAxisTitle => _columnAxisTitle;
     public string RowAxisTitle => _rowAxisTitle;
 
-    public IReadOnlyList<int> ColumnOrder => _columnOrder;
+    // The columns actually on the sheet, in order. Everything downstream — the
+    // sheet build, the labels, the statistics, the agent's reads — works from
+    // this, so hiding a metric removes it from all of them at once. The full
+    // arrangement lives on in _columnOrder, which is what a hidden metric comes
+    // back into when it is shown again.
+    public IReadOnlyList<int> ColumnOrder => _visibleColumns;
     public IReadOnlyList<int> RowOrder => _rowOrder;
 
     public string TitleAt(bool columns, int visIndex)
     {
-        IReadOnlyList<int> order = columns ? _columnOrder : _rowOrder;
+        IReadOnlyList<int> order = columns ? ColumnOrder : RowOrder;
         IReadOnlyList<string> titles = columns ? _columnTitles : _rowTitles;
         if (order == null || titles == null || visIndex < 0 || visIndex >= order.Count) return null;
         int d = order[visIndex];
@@ -45,9 +50,11 @@ public abstract class DataSource : MonoBehaviour
         return list;
     }
 
+    // -1 when the line is not on the sheet, which now covers a hidden metric as
+    // well as an index the data never had.
     public int VisIndexOf(bool columns, int dataIndex)
     {
-        IReadOnlyList<int> order = columns ? _columnOrder : _rowOrder;
+        IReadOnlyList<int> order = columns ? ColumnOrder : RowOrder;
         if (order == null || dataIndex < 0) return -1;
         for (int v = 0; v < order.Count; v++)
             if (order[v] == dataIndex) return v;
@@ -67,9 +74,99 @@ public abstract class DataSource : MonoBehaviour
 
     public int GroupCount(bool columns)
     {
-        int lines = (columns ? _columnOrder : _rowOrder).Count;
+        int lines = (columns ? ColumnOrder : RowOrder).Count;
         int size = GroupSize(columns);
         return size > 1 ? lines / size : lines;
+    }
+
+    // Filtering hides whole column groups: on a grouped axis that is one metric
+    // with both its years, and on an ungrouped one it is a single column. Groups
+    // are named by their place in the data, not on the sheet, so a hidden metric
+    // survives every reorder and comes back where the arrangement says it goes.
+
+    private readonly HashSet<int> _hiddenGroups = new HashSet<int>();
+    private readonly List<int> _visibleColumns = new List<int>();
+
+    public int DataGroupCount => _columnGroupSize > 1 ? ColumnCount / _columnGroupSize : ColumnCount;
+
+    public int HiddenGroupCount => _hiddenGroups.Count;
+
+    public bool IsDataGroupHidden(int dataGroup) => _hiddenGroups.Contains(dataGroup);
+
+    public int DataGroupOf(int dataColumn) =>
+        _columnGroupSize > 1 ? dataColumn / _columnGroupSize : dataColumn;
+
+    public string DataGroupTitleAt(int dataGroup)
+    {
+        int size = _columnGroupSize;
+        int first = size > 1 ? dataGroup * size : dataGroup;
+        return GroupTitleOfData(true, first);
+    }
+
+    // Data-space group ids in the order they stand on the sheet, hidden ones
+    // included, so a list of metrics reads the same whether or not it is filtered.
+    public List<int> DataGroupsInOrder()
+    {
+        var groups = new List<int>(DataGroupCount);
+        int size = Mathf.Max(_columnGroupSize, 1);
+        for (int i = 0; i < _columnOrder.Count; i += size)
+            groups.Add(DataGroupOf(_columnOrder[i]));
+        return groups;
+    }
+
+    public List<int> HiddenGroupsInOrder()
+    {
+        var hidden = new List<int>(_hiddenGroups.Count);
+        List<int> groups = DataGroupsInOrder();
+        for (int i = 0; i < groups.Count; i++)
+            if (_hiddenGroups.Contains(groups[i])) hidden.Add(groups[i]);
+        return hidden;
+    }
+
+    // Refused rather than clamped when it would empty the sheet: a sheet with no
+    // columns is not a filter the user can see their way out of.
+    public bool SetHiddenGroups(IEnumerable<int> hidden, out string refusal)
+    {
+        refusal = null;
+
+        var wanted = new HashSet<int>();
+        if (hidden != null)
+            foreach (int group in hidden)
+            {
+                if (group < 0 || group >= DataGroupCount)
+                {
+                    refusal = $"There is no {GroupNoun(this, true)} {group + 1} to hide.";
+                    return false;
+                }
+                wanted.Add(group);
+            }
+
+        if (wanted.Count >= DataGroupCount)
+        {
+            refusal = $"At least one {GroupNoun(this, true)} has to stay on the sheet.";
+            return false;
+        }
+
+        if (wanted.SetEquals(_hiddenGroups)) return false;
+
+        _hiddenGroups.Clear();
+        foreach (int group in wanted) _hiddenGroups.Add(group);
+        RaiseOrderChanged();
+        return true;
+    }
+
+    public bool ClearHiddenGroups() => SetHiddenGroups(null, out _);
+
+    private void RebuildVisibleColumns()
+    {
+        _visibleColumns.Clear();
+        int size = Mathf.Max(_columnGroupSize, 1);
+
+        for (int i = 0; i + size <= _columnOrder.Count; i += size)
+        {
+            if (_hiddenGroups.Contains(DataGroupOf(_columnOrder[i]))) continue;
+            for (int s = 0; s < size; s++) _visibleColumns.Add(_columnOrder[i + s]);
+        }
     }
 
     public int GroupOf(bool columns, int visIndex)
@@ -96,7 +193,7 @@ public abstract class DataSource : MonoBehaviour
         int size = GroupSize(columns);
         if (size <= 1) return TitleAt(columns, group);
 
-        IReadOnlyList<int> order = columns ? _columnOrder : _rowOrder;
+        IReadOnlyList<int> order = columns ? ColumnOrder : RowOrder;
         int vis = group * size;
         if (order == null || vis < 0 || vis >= order.Count) return null;
 
@@ -142,6 +239,15 @@ public abstract class DataSource : MonoBehaviour
         string title = data != null ? data.GroupTitleAt(columns, group) : null;
         if (!string.IsNullOrEmpty(title)) return title;
         return $"{GroupNoun(data, columns)} {group + 1}";
+    }
+
+    // The data-space twin of GroupLabelAt: names a metric by its place in the
+    // data rather than on the sheet, so a filtered-out one still has a name.
+    public static string GroupLabelOfData(DataSource data, int dataGroup)
+    {
+        string title = data != null ? data.DataGroupTitleAt(dataGroup) : null;
+        if (!string.IsNullOrEmpty(title)) return title;
+        return $"{GroupNoun(data, true)} {dataGroup + 1}";
     }
 
     public static string GroupNoun(DataSource data, bool columns) =>
@@ -329,6 +435,7 @@ public abstract class DataSource : MonoBehaviour
     {
         EnsureOrder(_columnOrder, ColumnCount);
         EnsureOrder(_rowOrder, RowCount);
+        RebuildVisibleColumns();
     }
 
     private void RaiseOrderChanged()
@@ -337,6 +444,8 @@ public abstract class DataSource : MonoBehaviour
         OnOrderChanged?.Invoke();
     }
 
+    // The Sort tool's own reset: it puts the arrangement back, and leaves the
+    // filter alone, because hiding a metric is the Filter tool's edit to undo.
     public void ResetOrder()
     {
         _columnSortMode = SortMode.Original;
@@ -346,11 +455,39 @@ public abstract class DataSource : MonoBehaviour
         RaiseOrderChanged();
     }
 
+    // 'order' is an arrangement of the columns on the sheet, so under a filter it
+    // is shorter than the dataset. It is spliced back over the slots the visible
+    // columns hold, which leaves every hidden metric exactly where it was: undo a
+    // filter after a sort and the metric returns to its place, not to the end.
     public bool SetColumnOrder(IReadOnlyList<int> order, SortMode mode)
     {
-        if (!ApplyOrder(_columnOrder, order, ColumnCount, _columnGroupSize)) return false;
+        if (!SpliceVisibleColumns(order)) return false;
         _columnSortMode = mode;
         RaiseOrderChanged();
+        return true;
+    }
+
+    private bool SpliceVisibleColumns(IReadOnlyList<int> order)
+    {
+        if (order == null || order.Count != _visibleColumns.Count) return false;
+        if (!IsRearrangementOf(order, _visibleColumns)) return false;
+        if (!IsGroupAligned(order, _columnGroupSize)) return false;
+
+        int taken = 0;
+        int size = Mathf.Max(_columnGroupSize, 1);
+        for (int i = 0; i + size <= _columnOrder.Count; i += size)
+        {
+            if (_hiddenGroups.Contains(DataGroupOf(_columnOrder[i]))) continue;
+            for (int s = 0; s < size; s++) _columnOrder[i + s] = order[taken++];
+        }
+        return true;
+    }
+
+    private static bool IsRearrangementOf(IReadOnlyList<int> order, List<int> of)
+    {
+        var seen = new HashSet<int>();
+        for (int i = 0; i < order.Count; i++)
+            if (!of.Contains(order[i]) || !seen.Add(order[i])) return false;
         return true;
     }
 
@@ -366,10 +503,11 @@ public abstract class DataSource : MonoBehaviour
     // holding 'fromPos' travels to the group slot holding 'toPos'.
     public void MoveColumn(int fromPos, int toPos)
     {
+        List<int> arrangement = new List<int>(_visibleColumns);
         bool moved = _columnGroupSize > 1
-            ? MoveGroupWithin(_columnOrder, fromPos / _columnGroupSize, toPos / _columnGroupSize, _columnGroupSize)
-            : MoveWithin(_columnOrder, fromPos, toPos);
-        if (moved) SetColumnOrder(_columnOrder, SortMode.Manual);
+            ? MoveGroupWithin(arrangement, fromPos / _columnGroupSize, toPos / _columnGroupSize, _columnGroupSize)
+            : MoveWithin(arrangement, fromPos, toPos);
+        if (moved) SetColumnOrder(arrangement, SortMode.Manual);
     }
 
     public void MoveRow(int fromPos, int toPos)
@@ -508,8 +646,10 @@ public abstract class DataSource : MonoBehaviour
         _isLoaded = loaded;
         _columnSortMode = SortMode.Original;
         _rowSortMode = SortMode.Original;
+        _hiddenGroups.Clear();
         InitIdentity(_columnOrder, ColumnCount);
         InitIdentity(_rowOrder, RowCount);
+        RebuildVisibleColumns();
         OnDataLoaded?.Invoke();
     }
 }

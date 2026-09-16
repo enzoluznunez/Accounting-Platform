@@ -7,7 +7,7 @@ public static class Scene {
     private static IDataPanel dataPanel;
     private static DataSource dataSource;
     private static Watch watch;
-    private static DetailTool detailTool;
+    private static FilterTool filterTool;
     private static SliceTool sliceTool;
     private static ColorTool colorTool;
     private static MoveTool moveTool;
@@ -34,7 +34,7 @@ public static class Scene {
         }
     }
     public static Watch Assistant => Resolve(ref watch);
-    public static DetailTool Detail => Resolve(ref detailTool);
+    public static FilterTool Filter => Resolve(ref filterTool);
     public static SliceTool Slice => Resolve(ref sliceTool);
     public static ColorTool Color => Resolve(ref colorTool);
     public static MoveTool Move => Resolve(ref moveTool);

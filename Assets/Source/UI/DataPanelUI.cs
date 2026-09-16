@@ -492,7 +492,9 @@ public class DataPanelUI : PanelUI, IDataPanel
 
     private void UpdateEmptyState()
     {
-        bool hasData = _datasets != null && _datasets.DatasetCount > 0;
+        // Listed is not read: the industries stand in the rail from startup, and
+        // there is nothing to show until one of them has actually been opened.
+        bool hasData = _datasets != null && _datasets.Active != null;
         bool present = hasData && !_collapsed;
 
         if (sheetManager != null) sheetManager.SetPresented(present);

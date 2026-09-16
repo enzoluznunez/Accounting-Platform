@@ -25,7 +25,7 @@ public static class ProceduralMemory {
         "Tools that take a row or column accept its name directly, so pass the name the user said rather than looking up a number first. " +
         "Any position you pass must come from a read in this session. Positions shift every time anything is reordered or sliced, so a position you read before an edit is already stale, and a position you never read is a guess. DescribeSheet gives you the order in force right now. " +
         "If you have not read the titles this session, call DescribeSheet before naming a row or column, and never assume what a sheet holds from its subject. " +
-        "Three arguments do their own reading: 'where' on CallColorTool, 'by' on CallSortTool, and 'of' on the Detail and Profile tools. " +
+        "Three arguments do their own reading: 'where' on CallColorTool, 'by' on CallSortTool, and 'of' on the Profile tool. " +
         "When you use one, the tool reads the numbers itself, so do not call GetNumbers or GetStatistics first; that read is wasted, and its answer is already stale by the time the tool runs. " +
         "They do not tell you the shape of the sheet, though. You still need to know which axis the user means, and the '[state]' message names what the rows and columns hold. " +
         "Tools that act on a piece take 'sheet', a piece id. The '[state]' message lists the ids that exist right now, so read them from there rather than spending a ListDatasets call on it. Pass one whenever the user has named a piece. " +
@@ -79,6 +79,7 @@ public static class ProceduralMemory {
     private const string Datasets =
         "# Datasets and change\n" +
         "Numbers are per-dataset: several datasets can be open at once (ListDatasets lists them), and after switching datasets you must call ListDatasets again for the new ids before using numbers. " +
+        "One dataset per industry is listed from the database at startup, and each is fetched only when opened, so a dataset ListDatasets marks 'read' false is available and one SetDataset call away; open it rather than saying there is no data for that industry. " +
         "Each dataset keeps its own tool edits and undo history; switching datasets restores them, so switching is always safe. " +
         "Between your calls, '[tool]' messages report what the user changed by hand. Together with each result's 'did', those are the complete record of what has happened. " +
         "Watch for changes that invalidate what you are holding: slicing keeps the cut piece's id for the first part and gives the second part a new id, so an id you already hold now covers less than it did; switching dataset changes every id and number, and the dataset changing shape clears its edits. When one happens, work from that new reality silently. " +
@@ -86,6 +87,32 @@ public static class ProceduralMemory {
         "The user saying there is no need to check does not make an old position valid; it only means you should not need a fresh read when the message already tells you the answer. " +
         "The same goes for a partly read source: its lines belong to the dataset they came from, so after a switch a page read starts over from the top, and source lines are never recited from memory; fetch them with DescribeDataset each time. " +
         "And it goes for the panels: act on a panel only in the state the latest message reports, so a panel the user closed needs reopening, or their say-so, before it can be placed.\n\n";
+
+    private const string Financials =
+        "# The financial database\n" +
+        "Ten industries, and they are the same ten wherever they are named: the datasets already listed in the " +
+        "room are those industries, and ListIndustries returns those industries. " +
+        "One more dataset spans all of them, holding the largest few companies from each so that every industry " +
+        "is on it. That is the one to reach for when the user is comparing industries rather than looking " +
+        "inside one.\n" +
+        "A sheet narrows two ways, and they are independent. Rows narrow by industry: open one industry to see " +
+        "its companies instead of a few from each. Columns narrow by kind of ratio: liquidity, efficiency, " +
+        "solvency, profitability and valuation, which ListRatios gives with the ratios under each. " +
+        "Anywhere CallFilterTool takes a metric it also takes a kind, and naming a kind moves all of its " +
+        "metrics together.\n" +
+        "When the user names an industry that ListDatasets already shows, open it with SetDataset. It is " +
+        "already here and costs no call. Reach for OpenIndustrySheet when the listed one will not do: when the " +
+        "user wants only some companies, or one SIC code from inside an industry. OpenIndustrySheet takes " +
+        "'industry' by name, or 'sic' for a narrower slice, or neither for every industry \u2014 never two of them.\n" +
+        "'where' chooses which companies reach the sheet; 'metrics' and 'categories' choose which ratios it " +
+        "draws. They are different lists and neither accepts the other's names: a ratio cannot be filtered on " +
+        "and a reported figure cannot be drawn. ListFields has what can be filtered on. " +
+        "A filter is written field:comparison:number, as in 'revenues:gt:1000'. Several of them all have to hold. " +
+        "Read ListFields before writing one and use the unit it gives, because the figures are reported in " +
+        "millions: a billion dollars of revenue is 1000, not 1000000000, and a filter in the wrong unit comes " +
+        "back as no companies rather than as a mistake. " +
+        "By default a company qualifies if it meets the filters in either year; pass match 'all' when the user " +
+        "means it held in both.\n\n";
 
     private const string Industries =
         "# Sheets that pair their columns\n" +
@@ -100,7 +127,13 @@ public static class ProceduralMemory {
         "in one metric against a bar in another, and never total or average across metrics: they are different " +
         "units. A bar below the base plane is a negative value. " +
         "Because of that, the tools refuse to rank or judge lines across metrics; when one does, name the metric " +
-        "and ask again.\n\n";
+        "and ask again. " +
+        "A sheet may hold more metrics than it shows: CallFilterTool takes metrics off the sheet and brings them " +
+        "back, and while one is off, no read can see it and no tool can act on it. " +
+        "So when the user asks about a metric that DescribeSheet does not list, it is filtered out rather than " +
+        "absent; bring it back with CallFilterTool and then read it. " +
+        "Hiding is how you make a wide sheet readable: leave the metrics the user is asking about and take the " +
+        "rest off in one call, rather than slicing.\n\n";
 
     private const string Search =
         "# Looking things up\n" +
@@ -155,7 +188,7 @@ public static class ProceduralMemory {
     }
 
     public static string PromptBody(bool webSearchEnabled) {
-        return Identity + Loop + BeforeActing + Reading + Acting + Results + Asking + Datasets + Industries
+        return Identity + Loop + BeforeActing + Reading + Acting + Results + Asking + Datasets + Financials + Industries
             + (webSearchEnabled ? Search : "")
             + Examples;
     }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 
 public class ManageDatasets : MonoBehaviour
@@ -24,6 +25,17 @@ public class ManageDatasets : MonoBehaviour
         public string payload;
         public int sheetId = ManageSheets.FirstSheetId;
         public bool loaded;
+
+        // A parse is in flight exactly while a reader exists that has not
+        // answered yet; the result handler and Unload both clear the reader.
+        public bool loading => source != null && !loaded;
+
+        // Listed from the industry index rather than scanned in: it stands in the
+        // rail from startup and is parsed the first time someone opens it, so a
+        // session begins with every industry named and none of them read.
+        public bool catalogued;
+        public int companies;
+
         public readonly EditList Edits = new EditList();
     }
 
@@ -85,17 +97,94 @@ public class ManageDatasets : MonoBehaviour
                 return;
             }
 
-        int ordinal = _datasetsCreated++;
-        GameObject host = new GameObject($"Dataset_{ordinal}");
+        Dataset dataset = new Dataset
+        {
+            payload = payload,
+            label = label ?? Stylize(DeriveLabel(payload, _datasetsCreated))
+        };
+        _datasets.Add(dataset);
+        BeginLoad(dataset);
+    }
+
+    // A dataset the app knows of but has not read. It is listed straight away and
+    // costs nothing until it is opened.
+    public void AddCatalogEntry(string file, string label, int companies)
+    {
+        if (AddCatalogEntryQuietly(file, label, companies)) OnDatasetsChanged?.Invoke();
+    }
+
+    // The rail is torn down and rebuilt on every change, so a whole index is
+    // listed in one go and announced once rather than once per industry.
+    public void AddCatalogEntries(IEnumerable<(string file, string label, int companies)> entries)
+    {
+        if (entries == null) return;
+
+        bool added = false;
+        foreach ((string file, string label, int companies) in entries)
+            added |= AddCatalogEntryQuietly(file, label, companies);
+
+        if (added) OnDatasetsChanged?.Invoke();
+    }
+
+    private bool AddCatalogEntryQuietly(string file, string label, int companies)
+    {
+        if (string.IsNullOrEmpty(file)) return false;
+
+        for (int i = 0; i < _datasets.Count; i++)
+            if (_datasets[i].payload == file) return false;
+
+        _datasets.Add(new Dataset
+        {
+            payload = file,
+            label = string.IsNullOrEmpty(label) ? Stylize(DeriveLabel(file, _datasets.Count)) : label,
+            catalogued = true,
+            companies = companies
+        });
+        return true;
+    }
+
+    private readonly Dictionary<Dataset, TaskCompletionSource<bool>> _awaitingLoad =
+        new Dictionary<Dataset, TaskCompletionSource<bool>>();
+
+    // Reads a listed dataset if it has not been read, and answers when it is
+    // ready either way. The assistant awaits this so that it never reports
+    // switching to an industry the app is still reading.
+    public Task<bool> EnsureLoaded(int index)
+    {
+        if (index < 0 || index >= _datasets.Count) return Task.FromResult(false);
+
+        Dataset dataset = _datasets[index];
+        if (dataset.loaded) return Task.FromResult(true);
+
+        if (!_awaitingLoad.TryGetValue(dataset, out TaskCompletionSource<bool> waiting))
+        {
+            waiting = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _awaitingLoad[dataset] = waiting;
+        }
+
+        BeginLoad(dataset);
+        return waiting.Task;
+    }
+
+    private void SettleLoad(Dataset dataset, bool ok)
+    {
+        if (!_awaitingLoad.TryGetValue(dataset, out TaskCompletionSource<bool> waiting)) return;
+        _awaitingLoad.Remove(dataset);
+        waiting.SetResult(ok);
+    }
+
+    private void BeginLoad(Dataset dataset)
+    {
+        if (dataset == null || dataset.loading || dataset.loaded) return;
+
+        GameObject host = new GameObject($"Dataset_{_datasetsCreated++}");
         host.transform.SetParent(transform, false);
 
         Parser reader = host.AddComponent<Parser>();
-
-        Dataset dataset = new Dataset { source = reader, payload = payload, label = label ?? Stylize(DeriveLabel(payload, ordinal)) };
-        _datasets.Add(dataset);
+        dataset.source = reader;
 
         reader.onLoadResult = (ok, reason) => OnDatasetLoadResult(reader, ok, reason);
-        reader.Load(payload);
+        reader.Load(dataset.payload);
     }
 
     private int IndexOfSource(DataSource source)
@@ -110,9 +199,23 @@ public class ManageDatasets : MonoBehaviour
         int index = IndexOfSource(reader);
         if (index < 0) return;
 
+        Dataset dataset = _datasets[index];
+        SettleLoad(dataset, ok);
+
         if (!ok)
         {
-            string payload = _datasets[index].payload;
+            // An industry stays in the rail when its file will not read: it is
+            // still one of the industries, and trying again is a tap away.
+            if (dataset.catalogued)
+            {
+                Unload(dataset);
+                Notices.Show(this, "Industry Unavailable",
+                    reason ?? $"{dataset.label} could not be read.");
+                OnDatasetsChanged?.Invoke();
+                return;
+            }
+
+            string payload = dataset.payload;
             RemoveDataset(index);
             OnDatasetLoadFailed?.Invoke(payload);
             Notices.Show(this, "Scan Failed",
@@ -120,7 +223,6 @@ public class ManageDatasets : MonoBehaviour
             return;
         }
 
-        Dataset dataset = _datasets[index];
         dataset.loaded = true;
 
         StateChannel.Record("Dataset", $"loaded a new dataset, {dataset.label}");
@@ -163,9 +265,13 @@ public class ManageDatasets : MonoBehaviour
     public void SwitchDataset(int index)
     {
         if (index < 0 || index >= _datasets.Count || index == _active) return;
-        if (_datasets[index].source == null)
+
+        // A listed industry is read here, the first time it is asked for. The
+        // parse finishes on a later frame and lands back in OnDatasetLoadResult,
+        // which switches to it then.
+        if (!_datasets[index].loaded)
         {
-            Debug.LogWarning($"[ManageDatasets] Dataset {index} has no source; ignoring switch.");
+            BeginLoad(_datasets[index]);
             return;
         }
 
@@ -218,6 +324,14 @@ public class ManageDatasets : MonoBehaviour
         int rest = order.Count - shown.Count;
         string list = string.Join(", ", shown);
         return rest > 0 ? $"{list} and {rest} more" : list;
+    }
+
+    // Gives back everything the parse held, and leaves the entry listed.
+    private void Unload(Dataset dataset)
+    {
+        dataset.loaded = false;
+        if (dataset.source != null) Destroy(dataset.source.gameObject);
+        dataset.source = null;
     }
 
     private void Rebind(Dataset dataset)

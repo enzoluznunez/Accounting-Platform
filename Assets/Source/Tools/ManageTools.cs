@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-public enum ToolType { None, Detail, Slice, Color, Move, Sort, Rotate, Scale, Profile }
+public enum ToolType { None, Filter, Slice, Color, Move, Sort, Rotate, Scale, Profile }
 
 public class ManageTools : MonoBehaviour
 {

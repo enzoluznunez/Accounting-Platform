@@ -2708,7 +2708,7 @@ GameObject:
   - component: {fileID: 492404638}
   - component: {fileID: 492404639}
   m_Layer: 0
-  m_Name: Detail
+  m_Name: Filter
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2740,12 +2740,11 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 14334b06993e04e38888f82e3f55271c, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::DetailTool
+  m_EditorClassIdentifier: Assembly-CSharp::FilterTool
   toolManager: {fileID: 849227663}
   sheetManager: {fileID: 849227661}
   readSheets: {fileID: 485031910}
   toolPanelUI: {fileID: 2024053875}
-  liftAboveMaximumHeight: 0.05
 --- !u!1 &504084520
 GameObject:
   m_ObjectHideFlags: 0
@@ -7714,6 +7713,7 @@ GameObject:
   - component: {fileID: 1166616935}
   - component: {fileID: 1166616950}
   - component: {fileID: 1166616951}
+  - component: {fileID: 1166616952}
   m_Layer: 0
   m_Name: Datasets
   m_TagString: Untagged
@@ -7766,6 +7766,20 @@ MonoBehaviour:
   manageDatasets: {fileID: 1166616950}
   sweepSeconds: 0.5
   allowedHosts: []
+--- !u!114 &1166616952
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1166616932}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 278d6042b6812657ffde60e42bb1713d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  manageDatasets: {fileID: 1166616950}
+  indexPath: Industries/index.csv
 --- !u!1 &1166617000
 GameObject:
   m_ObjectHideFlags: 0
@@ -8201,7 +8215,7 @@ GameObject:
   - component: {fileID: 1206525221}
   - component: {fileID: 1206525222}
   m_Layer: 6
-  m_Name: DetailContent
+  m_Name: FilterContent
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -8447,7 +8461,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Detail
+  m_text: Filter
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 0e769530298ca4eb2b553badbb2ccfe9, type: 2}
   m_sharedMaterial: {fileID: -4409478791676832665, guid: 0e769530298ca4eb2b553badbb2ccfe9, type: 2}
@@ -12154,7 +12168,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Detail
+  m_text: Filter
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 0e769530298ca4eb2b553badbb2ccfe9, type: 2}
   m_sharedMaterial: {fileID: -4409478791676832665, guid: 0e769530298ca4eb2b553badbb2ccfe9, type: 2}
@@ -12878,7 +12892,7 @@ GameObject:
   - component: {fileID: 1897496972}
   - component: {fileID: 1897496971}
   m_Layer: 6
-  m_Name: Tool_Detail
+  m_Name: Tool_Filter
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -14274,7 +14288,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Detail
+  m_text: Filter
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 0e769530298ca4eb2b553badbb2ccfe9, type: 2}
   m_sharedMaterial: {fileID: -4409478791676832665, guid: 0e769530298ca4eb2b553badbb2ccfe9, type: 2}

@@ -20,7 +20,7 @@ public sealed class DescribeSheet : AgenticTool<DescribeSheet.Args> {
                       "number is its position within that range), 'rowCategory' and 'columnCategory' (what the rows " +
                       "and columns represent, when the data says), its 'position' when it has one, its 'color' (a " +
                       "single name when every cell shares one, 'mixed' when they differ, absent when uncolored), and " +
-                      "'projections' (the cells and strips the Detail and Profile tools have raised above this " +
+                      "'projections' (the strips the Profile tool has raised above this " +
                       "sheet). This carries no cell values; call GetNumbers for the numbers.",
         Parameters = ParametersFor(typeof(Args))
     };
@@ -98,19 +98,12 @@ public sealed class DescribeSheet : AgenticTool<DescribeSheet.Args> {
             if (!mgr.TryResolveProjection(rec, out int vr, out int vc)) continue;
             if (vr < rowMin || vr > rowMax || vc < colMin || vc > colMax) continue;
 
-            var entry = new Dictionary<string, object> { { "kind", rec.isStrip ? "strip" : "cell" } };
-
-            if (rec.isStrip) {
-                entry["direction"] = rec.isColumn ? "column" : "row";
-                entry[rec.isColumn ? "column" : "row"] =
-                    Title(data, rec.isColumn, rec.isColumn ? rec.dataCol : rec.dataRow);
-                if (rec.isColumn && data.IsGrouped(true))
-                    entry["metric"] = data.GroupTitleOfData(true, rec.dataCol);
-            }
-            else {
-                entry["row"] = Title(data, false, rec.dataRow);
-                entry["column"] = Title(data, true, rec.dataCol);
-            }
+            var entry = new Dictionary<string, object> { { "kind", "strip" } };
+            entry["direction"] = rec.isColumn ? "column" : "row";
+            entry[rec.isColumn ? "column" : "row"] =
+                Title(data, rec.isColumn, rec.isColumn ? rec.dataCol : rec.dataRow);
+            if (rec.isColumn && data.IsGrouped(true))
+                entry["metric"] = data.GroupTitleOfData(true, rec.dataCol);
 
             list.Add(entry);
         }

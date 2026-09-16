@@ -34,7 +34,7 @@ public class ToolPanelUI : PanelUI
 
     public static readonly ToolType[] Tools =
     {
-        ToolType.Detail,
+        ToolType.Filter,
         ToolType.Slice,
         ToolType.Move,
         ToolType.Rotate,
@@ -50,8 +50,9 @@ public class ToolPanelUI : PanelUI
     {
         switch (tool)
         {
-            case ToolType.Detail:
-                return "The Detail tool lets you pull a single cube out of the sheet to see it enlarged.";
+            case ToolType.Filter:
+                return "The Filter tool lets you choose which metrics the sheet shows. " +
+                       "Tap one to take it off the sheet, tap it again to bring it back.";
             case ToolType.Slice:
                 return "The Slice tool lets you break a sheet apart by touching the gap between two columns or two rows.";
             case ToolType.Color:
@@ -829,6 +830,45 @@ public class ToolPanelUI : PanelUI
         };
 
         list.SetSelected(-1);
+        return list;
+    }
+
+    // A scrollable column of toggles in a tool's pane, for options that are not
+    // exclusive: unlike a swatch grid or a toggle row, any number can be on, so
+    // the caller keeps the handles and lights them itself.
+    // 'name' lets one tool keep more than one list: each replaces only the list
+    // it named, so rebuilding the metrics does not take the categories with it.
+    public ButtonList AddOptionList(ToolType tool, float height, string name = "OptionList")
+    {
+        GameObject content = GetToolContent(tool);
+        if (content == null) return null;
+
+        // Destroy is deferred to the end of the frame, so the outgoing list is
+        // renamed out of the way rather than left to answer to the same name.
+        Transform existing = content.transform.Find(name);
+        if (existing != null)
+        {
+            existing.name = name + "_Old";
+            Destroy(existing.gameObject);
+        }
+
+        GameObject host = new GameObject(name);
+        host.transform.SetParent(content.transform, false);
+        RectTransform rect = host.AddComponent<RectTransform>();
+
+        UILayout.FixedHeight(host, height);
+
+        ButtonList list = new ButtonList(rect, new ButtonList.Options
+        {
+            axis = ButtonList.Axis.Vertical,
+            sizing = ButtonList.Sizing.Measured,
+            alignment = TextAnchor.UpperLeft,
+            itemHeight = Style.Subbutton.y,
+            backed = true,
+            scrollable = true
+        });
+
+        host.transform.SetAsLastSibling();
         return list;
     }
 

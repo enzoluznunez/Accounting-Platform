@@ -172,7 +172,6 @@ public class ProfileTool : Tool
     {
         ProjectionRecord rec = new ProjectionRecord
         {
-            isStrip = true,
             isColumn = columns,
             dataRow = dataRow,
             dataCol = dataCol,

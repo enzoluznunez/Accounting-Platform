@@ -5,7 +5,7 @@ public sealed class SetTool : AgenticTool<SetTool.Args> {
 
     public class Args {
         [Doc("The tool to arm, or 'none' to clear the selection.")]
-        [Values("detail", "slice", "color", "move", "rotate", "scale", "sort", "profile", "none")]
+        [Values("filter", "slice", "color", "move", "rotate", "scale", "sort", "profile", "none")]
         public string tool;
     }
 

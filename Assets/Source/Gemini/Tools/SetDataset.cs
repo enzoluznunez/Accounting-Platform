@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Google.GenAI.Types;
 using Type = Google.GenAI.Types.Type;
 
@@ -13,11 +14,35 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "SetDataset",
-        Description = "Select one of the open datasets (switch to it), the same as the user tapping it; each " +
-                      "dataset keeps its own edits and undo history. Pass 'none' to deselect: collapse the current " +
-                      "dataset, hiding the sheet while keeping it loaded and switchable.",
+        Description = "Open one of the listed datasets (switch to it), the same as the user tapping it in the " +
+                      "rail; each dataset keeps its own edits and undo history. Most of them are industries the app " +
+                      "ships with, listed from the start and read the first time they are opened, so this is how " +
+                      "you put an industry on screen and it works whether or not the dataset has been read before. " +
+                      "Pass 'none' to deselect: collapse the current dataset, hiding the sheet while keeping it " +
+                      "loaded and switchable.",
         Parameters = ParametersFor(typeof(Args))
     };
+
+    // Most industries are listed but unread until someone opens one. Reading takes
+    // a frame or two, so the wait happens here, before Run reports on the dataset:
+    // otherwise the reply would describe the dataset being left rather than the one
+    // being opened.
+    protected override async Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) {
+        var bound = ToolArguments.Bind(typeof(Args), args, out _) as Args;
+
+        Task<bool> reading = null;
+        await MainThread.Run(() => {
+            var datasets = Scene.Datasets;
+            if (datasets == null || bound == null) return;
+            if (!TryResolveIndex(datasets, bound.dataset?.Trim(), out int index)) return;
+            if (datasets.Datasets[index].loaded) return;
+            reading = datasets.EnsureLoaded(index);
+        }).ConfigureAwait(false);
+
+        if (reading != null) await reading.ConfigureAwait(false);
+
+        return await base.Execute(args).ConfigureAwait(false);
+    }
 
     protected override void Run(Args args, Dictionary<string, object> result) {
         var datasets = Scene.Datasets;
@@ -36,6 +61,12 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
 
         if (!TryResolveIndex(datasets, query, out int index)) {
             result["error"] = $"No single open dataset matches '{query}'; if several match, ask the user which one.";
+            result["available"] = ListLabels(datasets);
+            return;
+        }
+
+        if (!datasets.Datasets[index].loaded) {
+            result["error"] = $"{datasets.Datasets[index].label} could not be read, so it is not open.";
             result["available"] = ListLabels(datasets);
             return;
         }

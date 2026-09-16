@@ -56,7 +56,7 @@ public class Parser : DataSource
             if (www.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"[Parser:{name}] Failed to load CSV from {url}: {www.error}");
-                Fail("The QR code's link could not be reached.");
+                Fail("That dataset could not be reached.");
                 yield break;
             }
 
@@ -71,7 +71,7 @@ public class Parser : DataSource
 
         if (LooksLikeHtml(csvText))
         {
-            Fail("The QR code's link returned a web page, not a dataset.");
+            Fail("That link returned a web page, not a dataset.");
             return;
         }
 
@@ -92,7 +92,7 @@ public class Parser : DataSource
 
         if (grid.Count < 2)
         {
-            Fail("The QR code's data has no data rows.");
+            Fail("That dataset has no data rows.");
             return;
         }
 
@@ -124,7 +124,7 @@ public class Parser : DataSource
 
         if (rowCount == 0 || colCount == 0)
         {
-            Fail("The QR code's data has no rows or columns.");
+            Fail("That dataset has no rows or columns.");
             return;
         }
 
@@ -143,7 +143,7 @@ public class Parser : DataSource
 
         if (numericCells == 0)
         {
-            Fail("The QR code's data has no numeric values.");
+            Fail("That dataset has no numeric values.");
             return;
         }
 
@@ -229,7 +229,7 @@ public class Parser : DataSource
         SetColumnGroupSize(1);
     }
 
-    private static List<string> ParseCSVLine(string line)
+    public static List<string> ParseCSVLine(string line)
     {
         var fields = new List<string>();
         bool inQuotes = false;

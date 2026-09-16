@@ -178,6 +178,8 @@ public class ManageSheets : MonoBehaviour
         int maxRow = _rowCount - 1;
         int maxCol = _colCount - 1;
 
+        RefitColumns(data);
+
         bool skipReflow = _skipReflowOnce;
         _skipReflowOnce = false;
         List<Dictionary<int, float>[]> lineSnapshot =
@@ -214,9 +216,107 @@ public class ManageSheets : MonoBehaviour
             else StartReflow(lineSnapshot);
         }
 
+        _builtColumns.Clear();
+        _builtColumns.AddRange(data.ColumnOrder);
+
         _placementPending = !ApplyPlacement();
         RebuildProjection();
         OnSheetsChanged?.Invoke();
+    }
+
+    // The columns that were on the sheet when it was last built, by data index.
+    private readonly List<int> _builtColumns = new List<int>();
+
+    // A filter changes which columns exist, so every piece's span is stated in
+    // positions that have just moved. A piece keeps the columns it still has,
+    // found by data index rather than by position, and a piece left with nothing
+    // goes, taking its edits with it. Pieces sliced apart by row share one column
+    // span and go on sharing it.
+    private void RefitColumns(DataSource data)
+    {
+        if (_sheets.Count == 0 || _builtColumns.Count == 0) return;
+
+        IReadOnlyList<int> now = data.ColumnOrder;
+        if (SameColumns(_builtColumns, now)) return;
+
+        var spans = new List<Span>();
+        for (int i = _sheets.Count - 1; i >= 0; i--)
+        {
+            CreateSheet piece = _sheets[i];
+            if (piece == null || SpanFor(spans, piece).max >= 0) continue;
+
+            ManageDatasets.ActiveEdits.DropPiece(piece.sheetId);
+            RemoveSheet(piece);
+        }
+
+        Tile(spans, now.Count - 1);
+
+        for (int i = 0; i < _sheets.Count; i++)
+        {
+            CreateSheet piece = _sheets[i];
+            if (piece == null) continue;
+
+            Span span = SpanFor(spans, piece);
+            piece.colMin = span.min;
+            piece.colMax = span.max;
+        }
+    }
+
+    private class Span
+    {
+        public int oldMin, oldMax;
+        public int min, max;
+    }
+
+    // Keyed by the span the piece had, so pieces that shared one before share the
+    // same answer now, and the mapping is worked out once for each.
+    private Span SpanFor(List<Span> spans, CreateSheet piece)
+    {
+        for (int i = 0; i < spans.Count; i++)
+            if (spans[i].oldMin == piece.colMin && spans[i].oldMax == piece.colMax) return spans[i];
+
+        Span span = new Span { oldMin = piece.colMin, oldMax = piece.colMax, min = int.MaxValue, max = -1 };
+        for (int vis = piece.colMin; vis <= piece.colMax; vis++)
+        {
+            if (vis < 0 || vis >= _builtColumns.Count) continue;
+
+            int at = _bound.VisIndexOf(true, _builtColumns[vis]);
+            if (at < 0) continue;
+
+            if (at < span.min) span.min = at;
+            if (at > span.max) span.max = at;
+        }
+
+        spans.Add(span);
+        return span;
+    }
+
+    // The surviving spans still run left to right, but a metric coming back sits
+    // in a gap between them. Each gap is closed onto the span on its left, which
+    // is the piece that metric was cut away with, so the pieces tile the field
+    // again and a metric shown after a slice rejoins the piece it belongs to.
+    private static void Tile(List<Span> spans, int maxCol)
+    {
+        var live = new List<Span>();
+        for (int i = 0; i < spans.Count; i++)
+            if (spans[i].max >= 0) live.Add(spans[i]);
+        if (live.Count == 0) return;
+
+        live.Sort((a, b) => a.min.CompareTo(b.min));
+
+        live[0].min = 0;
+        for (int i = 1; i < live.Count; i++) live[i - 1].max = live[i].min - 1;
+        live[live.Count - 1].max = maxCol;
+    }
+
+    // Set equality, not sequence equality: a reorder leaves every piece's span
+    // untouched and is animated by the reflow instead.
+    private static bool SameColumns(List<int> built, IReadOnlyList<int> now)
+    {
+        if (built.Count != now.Count) return false;
+        for (int i = 0; i < now.Count; i++)
+            if (!built.Contains(now[i])) return false;
+        return true;
     }
 
     private bool CoversWholeField(int maxRow, int maxCol)
@@ -405,8 +505,12 @@ public class ManageSheets : MonoBehaviour
             case EditKind.Color:
                 return UndoColorStroke(e.colorStroke) ? UndoResult.Applied : UndoResult.Stale;
 
-            case EditKind.Detail:
             case EditKind.Profile:
+                return UndoResult.Applied;
+
+            case EditKind.Filter:
+                if (_bound == null) return UndoResult.Unreachable;
+                _bound.SetHiddenGroups(e.filterPreHidden, out _);
                 return UndoResult.Applied;
 
             case EditKind.Sort:
@@ -446,6 +550,10 @@ public class ManageSheets : MonoBehaviour
                     if (e.colorStroke != null && ColorUtility.TryParseHtmlString(e.colorHex, out Color c))
                         for (int j = 0; j < e.colorStroke.Count; j++)
                             AddCellColor(e.colorStroke[j].dataRow, e.colorStroke[j].dataCol, c);
+                    break;
+
+                case EditKind.Filter:
+                    _bound.SetHiddenGroups(e.filterPostHidden, out _);
                     break;
 
             }
@@ -593,7 +701,7 @@ public class ManageSheets : MonoBehaviour
         for (int i = edits.Count - 1; i >= 0; i--)
         {
             Edit e = edits[i];
-            if (e.kind != EditKind.Detail && e.kind != EditKind.Profile) continue;
+            if (e.kind != EditKind.Profile) continue;
 
             if (_hasProjection && SameRecord(_projection.rec, e.projection)) return;
 
@@ -622,14 +730,13 @@ public class ManageSheets : MonoBehaviour
     }
 
     private static bool SameRecord(ProjectionRecord a, ProjectionRecord b) =>
-        a.isStrip == b.isStrip && a.isColumn == b.isColumn &&
-        a.dataRow == b.dataRow && a.dataCol == b.dataCol;
+        a.isColumn == b.isColumn && a.dataRow == b.dataRow && a.dataCol == b.dataCol;
 
     private bool ShowProjection(ProjectionRecord rec, bool animate = false)
     {
         if (_bound == null) return false;
 
-        CreateSheet view = CreateDetachedPiece(rec.isStrip ? "Projection_Strip" : "Projection_Cell");
+        CreateSheet view = CreateDetachedPiece("Projection_Strip");
         if (view == null) return false;
 
         Projection p = new Projection { rec = rec, view = view };
@@ -705,20 +812,6 @@ public class ManageSheets : MonoBehaviour
         ClearProjection();
     }
 
-    public bool TryProjectionPoint(CreateSheet source, int visRow, int visCol, float lift, out Vector3 world)
-    {
-        world = Vector3.zero;
-        if (source == null || !source.IsBuilt) return false;
-
-        CreateCube cube = source.CubeAt(visRow, visCol);
-        if (cube == null) return false;
-
-        Vector3 originLocal = cube.transform.localPosition;
-        originLocal.y = 0f;
-        world = source.transform.TransformPoint(originLocal + Vector3.up * (maximumHeight + lift));
-        return true;
-    }
-
     public bool TryStripPoint(CreateSheet source, bool column, int visLine, float lift, out Vector3 world)
     {
         world = Vector3.zero;
@@ -735,17 +828,6 @@ public class ManageSheets : MonoBehaviour
     {
         if (_bound == null || !_bound.HasValue(dataRow, dataCol)) return _baseY;
         return Mathf.Max(_bound.GetHeightFraction(dataRow, dataCol) * maximumHeight, _baseY);
-    }
-
-    public bool TryProjectionTopPoint(CreateSheet source, int visRow, int visCol, float lift, out Vector3 world)
-    {
-        if (!TryProjectionPoint(source, visRow, visCol, lift, out world)) return false;
-
-        CreateCube cube = source.CubeAt(visRow, visCol);
-        if (cube == null) return false;
-
-        world += source.transform.TransformVector(Vector3.up * BarTopLocal(cube.dataRow, cube.dataCol));
-        return true;
     }
 
     public bool TryStripTopPoint(CreateSheet source, bool column, int visLine, float lift, out Vector3 world)
@@ -765,14 +847,8 @@ public class ManageSheets : MonoBehaviour
     {
         if (p.view == null || p.source == null || !p.source.IsBuilt) return false;
 
-        Vector3 world;
-
-        if (p.rec.isStrip)
-        {
-            if (!TryStripPoint(p.source, p.rec.isColumn, p.rec.isColumn ? p.visCol : p.visRow,
-                    p.rec.lift, out world)) return false;
-        }
-        else if (!TryProjectionPoint(p.source, p.visRow, p.visCol, p.rec.lift, out world)) return false;
+        if (!TryStripPoint(p.source, p.rec.isColumn, p.rec.isColumn ? p.visCol : p.visRow,
+                p.rec.lift, out Vector3 world)) return false;
 
         if (_projectionRise > 0f)
             world -= p.source.transform.TransformVector(Vector3.up * _projectionRise);
@@ -800,21 +876,7 @@ public class ManageSheets : MonoBehaviour
         p.visRow = visRow;
         p.visCol = visCol;
 
-        return p.rec.isStrip
-            ? BuildStripProjection(ref p, source, visRow, visCol)
-            : BuildCellProjection(ref p, source, visRow, visCol);
-    }
-
-    private bool BuildCellProjection(ref Projection p, CreateSheet source, int visRow, int visCol)
-    {
-        if (source.CubeAt(visRow, visCol) == null) return false;
-
-        CreateSheet view = p.view;
-        view.Build(_bound, cubeMaterial, visRow, visRow, visCol, visCol,
-            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
-        view.SetPickable(false);
-
-        return PlaceProjection(p);
+        return BuildStripProjection(ref p, source, visRow, visCol);
     }
 
     private bool BuildStripProjection(ref Projection p, CreateSheet source,
@@ -1624,6 +1686,7 @@ public class ManageSheets : MonoBehaviour
         for (int i = 0; i < _sheets.Count; i++)
             if (_sheets[i] != null) Destroy(_sheets[i].gameObject);
         _sheets.Clear();
+        _builtColumns.Clear();
         ReportPieces();
     }
 

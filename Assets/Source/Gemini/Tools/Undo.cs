@@ -10,7 +10,7 @@ public sealed class Undo : AgenticTool<Undo.Args> {
         [Doc("Undo every edit. Confirm with the user before setting this."), Optional]
         public bool? all;
         [Doc("The tool whose edit you expect to be newest. Only checked for a single undo.")]
-        [Values("slice", "color", "move", "rotate", "scale", "sort", "detail", "profile"), Optional]
+        [Values("slice", "color", "move", "rotate", "scale", "sort", "filter", "profile"), Optional]
         public string tool;
     }
 
@@ -31,7 +31,7 @@ public sealed class Undo : AgenticTool<Undo.Args> {
                 Name = "Undo",
                 Description = "Undo recent edits, newest first (the tool panel's Undo / Undo All buttons). " +
                               "All edits share one timeline: slices, colors, moved/rotated/scaled pieces, Sort reorders, " +
-                              "and the projections raised by the Detail and Profile tools. " +
+                              "the projections raised by the Profile tool, and the metrics the Filter tool took off the sheet. " +
                               "Set 'all' to undo everything and clear the tool selection; 'count' never turns into Undo All, " +
                               "it stops when the timeline runs out. " +
                               "Optionally pass 'tool' to assert what the newest edit is; if it does not match, this refuses and names " +
@@ -70,12 +70,12 @@ public sealed class Undo : AgenticTool<Undo.Args> {
                 "rotate" => EditKind.Rotate,
                 "scale" => EditKind.Scale,
                 "sort" => EditKind.Sort,
-                "detail" => EditKind.Detail,
+                "filter" => EditKind.Filter,
                 "profile" => EditKind.Profile,
                 _ => null
             };
             if (expected == null) {
-                result["error"] = $"Unknown tool '{args.tool}'. Use slice, color, move, rotate, scale, sort, detail, or profile.";
+                result["error"] = $"Unknown tool '{args.tool}'. Use slice, color, move, rotate, scale, sort, filter, or profile.";
                 return;
             }
             if (top.kind != expected.Value) {

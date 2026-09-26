@@ -87,6 +87,8 @@ InitTestScene*.unity*
 # Where this machine's financial API lives (differs per machine)
 /[Aa]ssets/StreamingAssets/api.url
 /[Aa]ssets/StreamingAssets/api.url.meta
+/[Aa]ssets/StreamingAssets/api.key
+/[Aa]ssets/StreamingAssets/api.key.meta
 
 # Addressables default ignores, before user customizations
 /ServerData
@@ -133,4 +135,6 @@ __pycache__/
 /pipeline/.coverage
 # Connection strings and keys; .env.example shows the shape
 /pipeline/.env
+# sam build output
+/pipeline/.aws-sam/
 

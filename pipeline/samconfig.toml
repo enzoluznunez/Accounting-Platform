@@ -1,0 +1,18 @@
+# Answers to what `sam deploy --guided` would ask, so `sam deploy` alone works.
+version = 0.1
+
+[default.global.parameters]
+stack_name = "nasba-api"
+region = "us-east-1"
+profile = "nasba"
+
+[default.build.parameters]
+cached = false
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+# SAM makes and reuses one private bucket to upload the package through.
+resolve_s3 = true
+# Show what will change and ask before changing it.
+confirm_changeset = true
+fail_on_empty_changeset = false

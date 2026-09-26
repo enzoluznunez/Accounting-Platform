@@ -2,52 +2,45 @@
 
 Turns the raw financial export into the sheets the app draws, and serves them.
 
-Postgres cleans and computes; MongoDB Atlas holds what the API serves. The
-connection string lives in `pipeline/.env`, which git ignores — copy
-`.env.example` to `.env` and fill it in (the Atlas admin user, since loading
-writes).
+The export lives in a private S3 bucket; `rebuild.py` turns it into the
+documents MongoDB Atlas holds, and the API serves them. Settings live in
+`pipeline/.env`, which git ignores — copy `.env.example` to `.env` and fill it
+in (the Atlas admin user, since rebuilding writes). Reading the export needs an
+AWS login: `aws sso login --profile nasba`.
 
-## Build order
-
-No data files. The export lives in Postgres as `raw`, verbatim and undiscarded,
-and everything is derived from there.
+## Rebuilding the data
 
 ```sh
-python clean.py                    # raw -> staging          (in SQL)
-psql -d nasba -f schema.sql        # builds the tables
-python ratios.py                   # staging -> industries, companies,
-                                   #            financials, fundamentals
-python load_mongo.py               # those four tables -> Atlas, one
-                                   #   document per company
+python rebuild.py                  # the export in S3 -> Atlas, one document
+                                   #   per company
 ```
 
-`clean.py` owns what "usable" means, `schema.sql` owns the model, `ratios.py`
-computes, `load_mongo.py` publishes. Nothing round-trips through a file at any
-point.
+One command, and nothing kept in between: every run starts from the export.
+`clean.py` owns what "usable" means, `ratios.py` computes, `publish.py` shapes
+and writes the documents, and `rebuild.py` runs the three in order. `--db`
+publishes somewhere other than the live database; `--source` reads a local
+copy of the export instead of S3.
 
-### Seeding raw
+### The export
 
-`raw` is the seed the rest of the database grows from. To load an export into it
-the first time, or to replace it:
+`s3://nasba-data-354363694859/raw.csv.gz` is the seed everything grows from:
+every row the export had, verbatim, every value text. The bucket is private,
+encrypted and versioned, so replacing the file keeps the old one. To replace
+it with a new export:
 
 ```sh
-python clean.py --import Messy.csv
+gzip -k export.csv
+aws s3 cp export.csv.gz s3://nasba-data-354363694859/raw.csv.gz --profile nasba
+python rebuild.py
 ```
 
-Back it up from the database rather than keeping the export on disk:
-
-```sh
-pg_dump -d nasba -t raw -Fc -f raw.dump     # restore: pg_restore -d nasba raw.dump
-```
-
-Because `raw` keeps every row the export had, the ones cleaning discards are
-still there to ask about — `SELECT count(*) FROM raw WHERE esg_score = '.'`
-answers why a company is missing from a sheet.
+Because the export keeps every row, the ones cleaning discards are still there
+to ask about — `clean.read_raw()` hands back all of them, and
+`raw[raw.esg_score == "."]` answers why a company is missing from a sheet.
 
 ## Serving the app
 
-The API reads MongoDB only; Postgres need not be running to serve. The app
-ships no data. It asks `/industries` at startup for what exists, and
+The app ships no data. It asks `/industries` at startup for what exists, and
 draws each sheet from `/sheet`, so every row it shows is the database as it
 stands rather than an export of how it once stood:
 
@@ -58,6 +51,29 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 Bind `0.0.0.0` rather than localhost — the request comes from a headset on the
 same network, and the address it uses is the one line in
 `Assets/StreamingAssets/api.url`.
+
+## Deploying to AWS
+
+The same `api.py` runs on Lambda behind a Function URL; `template.yaml`
+defines it and `samconfig.toml` holds the deploy settings (profile `nasba`,
+us-east-1). Two SecureString parameters must exist first, and the function
+reads them itself — the template names them, it never holds them:
+
+- `/nasba/mongodb-uri` — the Atlas connection string for the read-only user
+- `/nasba/api-key` — what callers send as `X-Api-Key`; only `/health` is open
+
+```sh
+aws sso login --profile nasba
+sam build && sam deploy          # prints ApiUrl when it finishes
+python parity.py --check FILE --url <ApiUrl> --key <key>
+```
+
+Atlas has to accept connections from anywhere (`0.0.0.0/0`), since Lambda has
+no fixed address; the database password is what keeps it closed.
+
+Requirements are split the same way: `requirements.txt` is what the API needs
+and all that goes into the Lambda package; `requirements-dev.txt` adds the
+pipeline that rebuilds the data, the tests and uvicorn for working on a laptop.
 
 ## Generated artifacts
 
@@ -75,11 +91,12 @@ python codegen.py --check      # Assets/Source/Gemini/Tools/FinancialsContract.g
 pytest
 ```
 
-Needs both halves built by the steps above: `staging` in Postgres for the
-export as loaded, and the Atlas collection for what was computed from it. The
-formula tests check what reached Atlas against arithmetic done by hand on
-`staging`, so they verify the computation and the load together. The API
-tests seed a company or two and delete them again.
+Every run rebuilds a separate database, `nasba_test`, from the export before
+anything else happens, and every test reads that one — never `nasba`, which the
+deployed API serves. So a run checks the whole path: export, cleaning, ratios,
+documents and API. The formula tests check the documents against arithmetic
+done by hand on the cleaned export, and the API tests seed a company or two
+and delete them again. Needs the AWS login and `.env` above.
 
 Changing the database under the API is checked with `parity.py`: record the
 answers before the change, check them after, and every one must match byte for
@@ -88,7 +105,7 @@ byte. The snapshot holds real data, so keep it outside the repository.
 ## The one list
 
 `metrics.py` owns the names: the 18 ratios and their categories, the filterable
-line items, the year range, the sheet defaults, the SIC boundaries the divisions
-are cut on, and the slug a division takes as an identifier. `ratios.py` computes,
-`schema.sql` partitions and `api.py` serves — all from that one file, so they
-cannot disagree about what an industry or a metric is.
+line items, the year range, the sheet defaults, and the SIC boundaries the
+divisions are cut on. `ratios.py` computes, `publish.py` labels and validates
+and `api.py` serves — all from that one file, so they cannot disagree about
+what an industry or a metric is.

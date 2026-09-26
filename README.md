@@ -8,8 +8,8 @@ assistant can drive the same tools when asked.
 
 - [ ] A Meta Quest 3 with a USB-C cable
 - [ ] A Google Gemini API key on a paid tier
-- [ ] PostgreSQL and Python 3.13 on your computer
-- [ ] A Wi-Fi network the headset and your computer both join
+- [ ] The API key file, `api.key`, from the project owner
+- [ ] Internet access on the headset
 
 ## Prepare the Meta Quest 3
 
@@ -34,24 +34,23 @@ assistant can drive the same tools when asked.
 
 ## Configure the Project's Codebase
 
-### Connect with the PostgreSQL Server
+### Connect to the Financial Database
 
-Every sheet is drawn live from the database, so this has to be running before you open the app.
-Both the database and the service run on your own computer, and the headset reaches them across
-your Wi-Fi; nothing is hosted anywhere.
+Every sheet is drawn live from a database in the cloud: the API runs on AWS
+Lambda and reads MongoDB Atlas, and the app already knows its address. It only
+needs the key.
 
-1. Install PostgreSQL, then create the database the service expects: `createdb nasba`.
-2. Build its tables and load it by following `pipeline/README.md`. The financial export that
-   seeds it is not in this repository — ask the project owner for it.
-3. Install the service's dependencies, in a virtual environment so your system Python is left
-   alone: `python3 -m venv pipeline/.venv && pipeline/.venv/bin/pip install -r pipeline/requirements.txt`.
-4. From inside `pipeline/`, serve it on your network: `.venv/bin/uvicorn api:app --host 0.0.0.0 --port 8000`.
-5. Create a file at `Assets/StreamingAssets/api.url` holding one line — your computer's address
-   on that network, such as `http://192.168.1.42:8000`. `ipconfig getifaddr en0` prints it on
-   macOS, `ipconfig` on Windows. Git ignores this file, because the answer differs per machine.
-6. Keep the headset and the computer on the same Wi-Fi.
+1. Ask the project owner for `api.key`.
+2. Put it at `Assets/StreamingAssets/api.key`. Git ignores this path, so the key
+   stays on your machine and a fresh clone never carries one.
 
-Without a reachable service the app opens with nothing listed and says so in a notice.
+Without it the app opens with nothing listed and says so in a notice.
+
+To point the Editor at an API running on your own computer instead, put its
+address on one line in `Assets/StreamingAssets/api.url` (also git-ignored), such
+as `http://127.0.0.1:8000`. A headset build refuses plain `http://`, so this is
+for the Editor; `pipeline/README.md` covers running and deploying the API and
+rebuilding the data.
 
 ### Add Your Gemini API Key
 
@@ -73,7 +72,8 @@ Without it the app still runs and every sheet still works; only the assistant fa
    working except voice.
 
 Done when you are standing in passthrough with the industries listed beside you. An empty list
-means the service could not be reached, not that the build failed.
+means the database could not be reached — check the headset's internet connection and
+`api.key` — not that the build failed.
 
 ## FAQ
 

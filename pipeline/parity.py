@@ -7,6 +7,8 @@ database it is reading.
 
     python parity.py --record FILE    save the current API's answers
     python parity.py --check FILE     compare the current API against them
+    python parity.py --check FILE --url https://... --key KEY
+                                      compare a deployed API against them
 
 The snapshot holds real data, so keep it out of the repository.
 """
@@ -14,6 +16,8 @@ The snapshot holds real data, so keep it out of the repository.
 import argparse
 import json
 import sys
+import urllib.error
+import urllib.request
 
 from fastapi.testclient import TestClient
 
@@ -76,6 +80,21 @@ def requests():
     return paths
 
 
+def deployed(url, key):
+    """The same requests, sent over the network to a deployed API. Only spaces
+    are escaped, as the test client escapes them, so both see the same URL."""
+    out = {}
+    for path in requests():
+        request = urllib.request.Request(url.rstrip("/") + path.replace(" ", "%20"),
+                                         headers={"X-Api-Key": key} if key else {})
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                out[path] = [response.status, response.read().decode()]
+        except urllib.error.HTTPError as refused:
+            out[path] = [refused.code, refused.read().decode()]
+    return out
+
+
 def answers():
     import api
 
@@ -92,9 +111,11 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--record", metavar="FILE")
     group.add_argument("--check", metavar="FILE")
+    parser.add_argument("--url", help="a deployed API to check instead of this one")
+    parser.add_argument("--key", help="its X-Api-Key")
     args = parser.parse_args()
 
-    current = answers()
+    current = deployed(args.url, args.key) if args.url else answers()
     if args.record:
         with open(args.record, "w") as handle:
             json.dump(current, handle, indent=0)

@@ -1,24 +1,35 @@
-import pandas as pd
-import psycopg
-import pytest
+import os
 
-import database
-from clean import DSN
-from metrics import FUNDAMENTALS, RATIOS
+# The tests seed companies and delete them again, so they never run against the
+# database the deployed API serves: every test reads and writes this one, which
+# the session rebuilds from the export before anything runs. Set before
+# database is imported, so no .env can point the tests anywhere else.
+TEST_DATABASE = "nasba_test"
+os.environ["MONGODB_DB"] = TEST_DATABASE
+
+import pandas as pd  # noqa: E402
+import pytest  # noqa: E402
+
+import database  # noqa: E402
+import publish  # noqa: E402
+import rebuild  # noqa: E402
+from metrics import FUNDAMENTALS, RATIOS  # noqa: E402
 
 
+@pytest.fixture(scope="session", autouse=True)
 def staging():
-    """The export as clean.py loaded it. Cleaning and computing still happen in
-    Postgres, so the formula tests check what reached MongoDB against the rows
-    it was computed from there."""
-    with psycopg.connect(DSN) as conn:
-        rows = conn.execute("SELECT * FROM staging")
-        return pd.DataFrame(rows.fetchall(), columns=[c.name for c in rows.description])
+    """The export, cleaned, and published into the test database. Every run
+    starts from the export in S3, so the tests check the whole path — export,
+    cleaning, ratios, documents, API — rather than whatever was loaded last."""
+    assert database.name() == TEST_DATABASE
+    cleaned, docs = rebuild.build()
+    publish.publish(docs, TEST_DATABASE)
+    return cleaned
 
 
 def per_year(section, names):
-    """One row per company-year, as the Postgres tables had them, read out of
-    the documents the API serves. An unreported figure comes back as NaN."""
+    """One row per company-year, flattened out of the documents the API
+    serves, so the formula tests can line them up against the cleaned export. An unreported figure comes back as NaN."""
     rows = []
     for doc in database.companies().find({}, {"sic_code": 1, "years": 1}):
         for entry in doc["years"]:
@@ -32,14 +43,14 @@ def per_year(section, names):
 
 
 @pytest.fixture(scope="session")
-def clean():
-    """The export as it was loaded, with the key column under the name every
-    other table calls it."""
-    return staging().rename(columns={"trading_symbol": "ticker"})
+def clean(staging):
+    """The export as it was cleaned, with the key column under the name every
+    other frame calls it."""
+    return staging.rename(columns={"trading_symbol": "ticker"})
 
 
 @pytest.fixture(scope="session")
-def ratios():
+def ratios(staging):
     return per_year("ratios", RATIOS)
 
 
@@ -59,18 +70,18 @@ def client():
 
 
 @pytest.fixture(scope="session")
-def fundamentals():
+def fundamentals(staging):
     return per_year("fundamentals", FUNDAMENTALS)
 
 
 @pytest.fixture(scope="session")
-def companies():
+def companies(staging):
     docs = database.companies().find({}, {"years": 0})
     return pd.DataFrame([{"ticker": doc.pop("_id"), **doc} for doc in docs])
 
 
 @pytest.fixture(scope="session")
-def name_order():
+def name_order(staging):
     """Tickers in the order the database puts them in, which is the order the
     sheet is built with. Rows are labelled by ticker rather than by company
     name, so a ticker is what the row axis is ordered on."""

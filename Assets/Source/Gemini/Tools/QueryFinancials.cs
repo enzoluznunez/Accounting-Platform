@@ -5,15 +5,31 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Google.GenAI.Types;
 using UnityEngine;
+using UnityEngine.Networking;
 
 public static class FinancialsApi {
 
-    // Where the database is. IndustryCatalog overwrites this at startup from
-    // StreamingAssets/api.url, so this default only stands when that file is
-    // missing — and on a headset it cannot answer, which is the point: an
-    // unconfigured build fails loudly at launch rather than halfway through a
-    // conversation.
-    public static string BaseUrl = "http://127.0.0.1:8000";
+    // Where the database is: the deployed API, the same for every build.
+    // StreamingAssets/api.url overrides it when present, which is how the
+    // Editor is pointed at a server running on this machine instead.
+    public static string BaseUrl = "https://k2d3ysw7ssd6sjh7ygjfa7ugpe0dmtxj.lambda-url.us-east-1.on.aws";
+
+    // What the deployed API expects in X-Api-Key. IndustryCatalog reads it from
+    // StreamingAssets/api.key at startup; left empty, requests go out without
+    // it, which a server on this machine does not ask for and the deployed one
+    // refuses with a sentence the assistant can read out.
+    public static string ApiKey = "";
+    public const string KeyHeader = "X-Api-Key";
+
+    // Only requests to the API carry the key: a sheet can also be a file in
+    // StreamingAssets or another site's URL, and neither should ever see it.
+    public static bool IsApi(string url) =>
+        !string.IsNullOrEmpty(url) &&
+        url.StartsWith(BaseUrl.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase);
+
+    public static void Authorize(UnityWebRequest request) {
+        if (!string.IsNullOrEmpty(ApiKey) && IsApi(request.url)) request.SetRequestHeader(KeyHeader, ApiKey);
+    }
 
     public const string Unreachable = "The financial database could not be reached.";
 
@@ -26,7 +42,9 @@ public static class FinancialsApi {
     }
 
     public static async Task<string> Get(string path) {
-        HttpResponseMessage response = await http.GetAsync(BaseUrl.TrimEnd('/') + path).ConfigureAwait(false);
+        using var request = new HttpRequestMessage(HttpMethod.Get, BaseUrl.TrimEnd('/') + path);
+        if (!string.IsNullOrEmpty(ApiKey)) request.Headers.Add(KeyHeader, ApiKey);
+        using HttpResponseMessage response = await http.SendAsync(request).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         if (!response.IsSuccessStatusCode) throw new ApiError((int)response.StatusCode, Detail(body));
         return body;

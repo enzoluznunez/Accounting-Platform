@@ -1,8 +1,7 @@
-"""What Postgres enforced with columns, foreign keys and partitions, the company
-collection enforces with a validator and two indexes. These tests hold that it
-still does: a document that breaks the shape is refused, and a sheet scoped to
-an industry reads that industry's companies through an index rather than
-scanning all of them."""
+"""The company collection holds its shape with a validator and reads through
+two indexes. These tests hold that it still does: a document that breaks the
+shape is refused, and a sheet scoped to an industry reads that industry's
+companies through an index rather than scanning all of them."""
 
 import pytest
 from pymongo.errors import WriteError

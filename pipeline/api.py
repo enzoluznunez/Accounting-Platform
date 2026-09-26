@@ -1,9 +1,11 @@
+import hmac
 from enum import StrEnum
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
+from mangum import Mangum
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 import database
@@ -82,6 +84,27 @@ class Predicate(BaseModel):
         return cls(field=field, op=op, value=number)
 
 app = FastAPI(title="NASBA Financial Ratios")
+
+# What anyone may ask without a key: whether the service is up, and nothing
+# about the data beyond how many rows it holds.
+OPEN_PATHS = {"/health"}
+
+
+@app.middleware("http")
+async def require_api_key(request: Request, call_next):
+    """The data is licensed, and a Function URL is reachable by anyone, so every
+    request but a health check carries the key in X-Api-Key. Where no key is
+    configured — a laptop, the tests — nothing is checked, so the key is a
+    property of the deployment rather than of the code."""
+    expected = database.setting("API_KEY")
+    if expected and request.url.path not in OPEN_PATHS:
+        given = request.headers.get("x-api-key", "")
+        # Compared in constant time, so the reply's timing says nothing about
+        # how much of a guess was right.
+        if not hmac.compare_digest(given.encode(), expected.encode()):
+            return JSONResponse(status_code=401,
+                                content={"detail": "The API key is missing or wrong."})
+    return await call_next(request)
 
 
 # What to say when a parameter's value is not one of the names it enumerates.
@@ -267,7 +290,7 @@ class SheetQuery(BaseModel):
 
 @app.get("/health", response_model=Health)
 def health():
-    # One financial row per company-year, as the Postgres table counted them.
+    # One financial row per company-year.
     counted = list(database.companies().aggregate([
         {"$group": {"_id": None, "n": {"$sum": {"$size": "$years"}}}},
     ]))
@@ -351,7 +374,7 @@ def sheet_pipeline(query):
         # than across all of them: a few from each keeps every industry on the
         # sheet. Taken before any filter, so a filter narrows those few.
         # $topN rather than a window: a window numbers rows by one sort key, and
-        # ties on size have to fall to the ticker, as they did in Postgres.
+        # ties on size have to fall to the ticker, as they do in the final cut.
         stages += [
             {"$group": {"_id": "$division",
                         "top": {"$topN": {"n": query.per, "sortBy": {"size": -1, "_id": 1},
@@ -434,3 +457,8 @@ def sheet(query: Annotated[SheetQuery, Query()]):
         return sheet_csv(query)
     except EmptySheet as empty:
         raise HTTPException(404, str(empty)) from None
+
+
+# Lambda's entry point: Mangum turns a Function URL event into the request
+# FastAPI expects and its response back. uvicorn on a laptop never touches it.
+handler = Mangum(app, lifespan="off")

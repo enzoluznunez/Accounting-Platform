@@ -1,0 +1,10 @@
+# Everything for working on a laptop: the API's own requirements, plus the
+# pipeline that rebuilds the data, the tests, and a local server.
+-r requirements.txt
+boto3==1.43.103
+httpx2==2.12.0
+numpy==2.5.3
+pandas==3.0.5
+pytest==9.1.1
+pytest-cov==7.1.0
+uvicorn==0.52.4

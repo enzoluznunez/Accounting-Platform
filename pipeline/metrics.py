@@ -1,8 +1,6 @@
 """The one list of ratios: ratios.py computes them in this order, the financials
 table stores them in this order, and the API serves them by these names."""
 
-import re
-
 RATIOS = [
     "working_capital",
     "current_ratio",
@@ -146,9 +144,9 @@ LIMIT_MAXIMUM = 200
 SIZE_METRIC = "working_capital"
 
 # Each division is a contiguous run of SIC codes: a code belongs to the first
-# division whose ceiling it falls under. ratios.py labels companies with this and
-# schema.sql cuts the financials partitions on the same boundaries, so a division
-# and a partition are the same set of companies by construction.
+# division whose ceiling it falls under. publish.py labels every company with it,
+# and /sheet and /industries read the label, so an industry means one set of
+# companies everywhere.
 DIVISIONS = [
     (1000, "Agriculture"),
     (1500, "Mining"),
@@ -173,7 +171,7 @@ def division(sic):
 
 
 def division_bounds():
-    """(division, lower, upper) per partition, lower/upper being None at the
+    """(division, lower, upper) per division, lower/upper being None at the
     open ends. Contiguous and total, so every SIC code lands in exactly one."""
     bounds = []
     floor = None
@@ -221,9 +219,3 @@ DIVISION_COLORS = {
 # holds a name this file does not know — a sheet drawn in neutral grey says so
 # and stays readable, where a lookup that raised would cost the whole request.
 UNKNOWN_DIVISION_COLOR = "#8a8a8a"
-
-
-def slug(division_name):
-    """A division as an identifier. schema.sql names its partitions with these,
-    so a partition and the division it holds cannot end up named differently."""
-    return re.sub(r"_+", "_", re.sub(r"[^A-Za-z0-9]+", "_", division_name)).strip("_").lower()

@@ -4,8 +4,10 @@ company with its years inside it.
     {_id: ticker, name, gvkey, cik, sic_code, division, address: {...},
      years: [{year, ratios: {...}, fundamentals: {...}}, ...]}
 
-The connection string comes from the environment, or from pipeline/.env when
-run on a laptop; .env.example shows its shape. Nothing here holds a password.
+Settings come from the environment, or from pipeline/.env on a laptop;
+.env.example shows its shape. On Lambda the environment names a Parameter Store
+entry instead of holding the secret, so a password is never in the template,
+the package or the function's configuration. Nothing here holds one either.
 """
 
 import os
@@ -21,10 +23,28 @@ COLLECTION = "companies"
 
 
 @cache
+def setting(name):
+    """A setting by name: NAME from the environment if it is there, otherwise
+    the SecureString parameter NAME_PARAMETER points at, read once per cold
+    start. None when neither is set."""
+    if os.environ.get(name):
+        return os.environ[name]
+    parameter = os.environ.get(f"{name}_PARAMETER")
+    if not parameter:
+        return None
+    # Imported here: Lambda's runtime provides boto3, and a laptop reading .env
+    # never gets this far.
+    import boto3
+
+    found = boto3.client("ssm").get_parameter(Name=parameter, WithDecryption=True)
+    return found["Parameter"]["Value"]
+
+
+@cache
 def client():
     """One client per process. It pools its own connections, so every request
     shares it rather than opening a connection of its own."""
-    uri = os.environ.get("MONGODB_URI")
+    uri = setting("MONGODB_URI")
     if not uri:
         raise RuntimeError(
             "MONGODB_URI is not set. Copy pipeline/.env.example to pipeline/.env "

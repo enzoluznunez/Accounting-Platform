@@ -1,30 +1,27 @@
-"""Hold the export in Postgres and derive the usable rows from it in SQL.
+"""Read the export as it was delivered and keep the rows that are usable.
 
-Two tables. 'raw' is the export verbatim, every column text, nothing discarded:
-it is the seed this whole database grows from, and it is what the rows that do
-not survive cleaning can still be asked about. 'staging' is the typed subset
-everything downstream reads, and the WHERE clause that separates them is the
-whole definition of "usable".
+The export is the seed the whole dataset grows from. It lives in a private S3
+bucket, verbatim and undiscarded, so a row cleaning drops is still there to
+ask about. Nothing here writes it anywhere: rebuild.py reads it, cleans it,
+computes from it and publishes the result.
 
-    python clean.py                  rebuild staging from raw
-    python clean.py --import FILE    load an export into raw first
+    raw = read_raw()            the export, every column text
+    staging = usable(raw)       the typed subset everything downstream reads
 
-The import is a bootstrap: once 'raw' holds the export, the file has nothing
-left to say. Back it up with pg_dump rather than keeping a copy on disk:
-
-    pg_dump -d nasba -t raw -Fc -f raw.dump
+usable() is the whole definition of "usable".
 """
 
-import argparse
-import csv
+import gzip
+import io
+import os
 import re
-import sys
 
-import psycopg
+import pandas as pd
 
 from metrics import YEARS
 
-DSN = "dbname=nasba"
+# Where the export is: an s3:// URI or a local path, gzipped or not.
+RAW_SOURCE = os.environ.get("RAW_SOURCE", "s3://nasba-data-354363694859/raw.csv.gz")
 
 KEYS = ["Trading Symbol", "Year", "GVKEY", "SIC Code", "Entity Central Index Key"]
 TEXT = [
@@ -43,7 +40,9 @@ MISSING = [".", "", "NA", "N/A", "NaN", "nan", "null", "NULL"]
 
 def column(heading):
     """'Entity Address, City or Town' -> entity_address_city_or_town. The one
-    place the export's headings are turned into names SQL can hold."""
+    place the export's headings are turned into identifiers. Applying it to a
+    name it already produced changes nothing, so the stored export, whose
+    headings are already names, reads the same as the original."""
     return re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", heading.lower())).strip("_")
 
 
@@ -51,99 +50,64 @@ KEY_COLUMNS = {column(h) for h in KEYS}
 TEXT_COLUMNS = {column(h) for h in TEXT}
 
 
-def kind(name):
-    return ("TEXT" if name in TEXT_COLUMNS
-            else "INTEGER" if name in KEY_COLUMNS
-            else "DOUBLE PRECISION")
+def read_bytes(source):
+    if source.startswith("s3://"):
+        # Imported here: only a read from S3 needs it.
+        import boto3
+
+        bucket, _, key = source.removeprefix("s3://").partition("/")
+        return boto3.client("s3").get_object(Bucket=bucket, Key=key)["Body"].read()
+    with open(source, "rb") as handle:
+        return handle.read()
 
 
-def columns_of(conn, table):
-    return [
-        row[0] for row in conn.execute(
-            "SELECT column_name FROM information_schema.columns"
-            " WHERE table_name = %s ORDER BY ordinal_position", (table,)
-        )
-    ]
+def read_raw(source=RAW_SOURCE):
+    """The export, every value as the text it was written as. Nothing is
+    parsed or guessed at here: an empty cell is an empty string, and 'NA' is
+    the two letters, so what counts as missing is decided in one place below."""
+    data = read_bytes(source)
+    if data[:2] == b"\x1f\x8b":
+        data = gzip.decompress(data)
+    raw = pd.read_csv(io.BytesIO(data), dtype=str, keep_default_na=False, na_filter=False)
+    raw.columns = [column(h.replace("\n", " ")) for h in raw.columns]
+    return raw
 
 
-def import_export(conn, path):
-    """Load an export file into 'raw', replacing whatever is there. Every column
-    is text, so a malformed figure is a value to look at rather than a load that
-    fails."""
-    with open(path, newline="") as handle:
-        heads = [h.replace("\n", " ") for h in next(csv.reader(handle))]
-    names = [column(h) for h in heads]
+def usable(raw):
+    """raw -> staging. A row is usable when every column has a figure and its
+    year is one the sheets draw; a company is usable when every one of those
+    years survives, so a sheet never shows a bar for one year and a gap for
+    the other."""
+    present = ~raw.isin(MISSING).any(axis=1)
+    in_years = raw["year"].isin([str(year) for year in YEARS])
+    staging = raw[present & in_years]
 
-    conn.execute("DROP TABLE IF EXISTS raw CASCADE")
-    conn.execute(f"CREATE TABLE raw ({', '.join(f'{n} TEXT' for n in names)})")
-    with open(path, "rb") as handle:
-        with conn.cursor().copy(
-            f"COPY raw ({', '.join(names)}) FROM STDIN WITH (FORMAT csv, HEADER)"
-        ) as copy:
-            while chunk := handle.read(1 << 20):
-                copy.write(chunk)
-    conn.execute("ANALYZE raw")
+    years_each = staging.groupby("trading_symbol")["year"].transform("size")
+    staging = staging[years_each == len(YEARS)].copy()
 
+    # Text before key: the ticker is both, and it stays text.
+    for name in staging.columns:
+        if name in TEXT_COLUMNS:
+            continue
+        if name in KEY_COLUMNS:
+            staging[name] = staging[name].str.strip().astype("int64")
+        else:
+            staging[name] = staging[name].astype("float64")
 
-def transform(conn):
-    """raw -> staging. Reads the shape from the table, not from a file, so this
-    works whether or not an export is still lying around."""
-    names = columns_of(conn, "raw")
-    if not names:
-        raise SystemExit("no 'raw' table; load an export first: python clean.py --import FILE")
-
-    # A row is usable when every column has a figure. Spelled out per column
-    # rather than hidden inside a dropna(), so what was discarded stays a
-    # question anyone can put to 'raw'.
-    present = " AND ".join(
-        f"{n} IS NOT NULL AND {n} <> ALL(%(missing)s::text[])" for n in names
-    )
-    cast = ",\n    ".join(
-        f"{n} AS {n}" if kind(n) == "TEXT" else f"{n}::{kind(n)} AS {n}"
-        for n in names
-    )
-
-    conn.execute("DROP TABLE IF EXISTS staging CASCADE")
-    conn.execute(
-        f"CREATE TABLE staging AS SELECT\n    {cast}\nFROM raw\n"
-        # Compared as text: a cast in WHERE would be evaluated against every
-        # row, including the ones this clause exists to exclude.
-        f"WHERE {present} AND year = ANY(%(years)s::text[])",
-        {"missing": MISSING, "years": [str(y) for y in YEARS]},
-    )
-
-    # Only companies reported in every year survive, so a sheet never shows a
-    # bar for one year and a gap for the other.
-    conn.execute(
-        "DELETE FROM staging s WHERE ("
-        "  SELECT count(*) FROM staging t WHERE t.trading_symbol = s.trading_symbol"
-        ") <> %s",
-        (len(YEARS),),
-    )
-    conn.execute("ALTER TABLE staging ADD PRIMARY KEY (trading_symbol, year)")
-    conn.execute("ANALYZE staging")
+    if staging.duplicated(["trading_symbol", "year"]).any():
+        raise ValueError("the export reports some company twice for one year")
+    # In company-then-year order, so everything computed from it comes out the
+    # same however the export happened to be ordered.
+    return staging.sort_values(["trading_symbol", "year"]).reset_index(drop=True)
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--import", dest="source", metavar="FILE",
-                        help="load this export into 'raw' before transforming")
-    args = parser.parse_args()
-
-    with psycopg.connect(DSN) as conn:
-        if args.source:
-            import_export(conn, args.source)
-        transform(conn)
-
-        raw_rows = conn.execute("SELECT count(*) FROM raw").fetchone()[0]
-        rows, companies = conn.execute(
-            "SELECT count(*), count(DISTINCT trading_symbol) FROM staging"
-        ).fetchone()
-
-    print(f"raw: {raw_rows} rows -> staging: {rows} rows, {companies} companies "
-          f"({raw_rows - rows} discarded)")
+    raw = read_raw()
+    staging = usable(raw)
+    print(f"raw: {len(raw)} rows -> staging: {len(staging)} rows, "
+          f"{staging['trading_symbol'].nunique()} companies ({len(raw) - len(staging)} discarded)")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

@@ -19,6 +19,10 @@ public class IndustryCatalog : MonoBehaviour
              "Absent or empty, the built-in default is used.")]
     public string apiUrlFile = "api.url";
 
+    [Tooltip("One-line file inside StreamingAssets holding the key the deployed API " +
+             "expects in X-Api-Key. Git ignores it, as it does gemini.key.")]
+    public string apiKeyFile = "api.key";
+
     [Tooltip("Label for the one sheet that spans every industry.")]
     public string allIndustriesLabel = "All Industries";
 
@@ -52,43 +56,36 @@ public class IndustryCatalog : MonoBehaviour
 
     private IEnumerator Bootstrap()
     {
-        yield return ReadApiUrl();
+        yield return ReadLine(apiUrlFile, configured => FinancialsApi.BaseUrl = configured);
+        Debug.Log($"[IndustryCatalog] Financial database at {FinancialsApi.BaseUrl}.");
+
+        yield return ReadLine(apiKeyFile, key => FinancialsApi.ApiKey = key);
+        if (string.IsNullOrEmpty(FinancialsApi.ApiKey))
+            Debug.LogWarning($"[IndustryCatalog] No '{apiKeyFile}' in StreamingAssets; requests carry no " +
+                             "API key, which only a server on this machine will accept.");
+
         yield return ListIndustries();
     }
 
-    // Where the database is, is configuration and not data: one line in
-    // StreamingAssets, so a user points the app at their own machine without
-    // editing a source file and rebuilding.
-    private IEnumerator ReadApiUrl()
+    // Where the database is and how to be let in are configuration, not data:
+    // one line each in StreamingAssets, so a build is pointed and keyed without
+    // editing a source file. A file that is absent or empty leaves the default.
+    private IEnumerator ReadLine(string fileName, Action<string> apply)
     {
-        if (string.IsNullOrEmpty(apiUrlFile)) yield break;
+        if (string.IsNullOrEmpty(fileName)) yield break;
 
-        string path = Path.Combine(Application.streamingAssetsPath, apiUrlFile);
+        string path = Path.Combine(Application.streamingAssetsPath, fileName);
         string url = path.Contains("://") ? path : "file://" + path;
 
         using (UnityWebRequest www = UnityWebRequest.Get(url))
         {
             yield return www.SendWebRequest();
 
-            if (www.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogWarning($"[IndustryCatalog] No '{apiUrlFile}' in StreamingAssets; " +
-                                 $"falling back to {FinancialsApi.BaseUrl}.");
-                yield break;
-            }
+            if (www.result != UnityWebRequest.Result.Success) yield break;
 
-            string configured = www.downloadHandler.text.Trim();
-            if (configured.Length == 0)
-            {
-                Debug.LogWarning($"[IndustryCatalog] '{apiUrlFile}' holds no URL; " +
-                                 $"falling back to {FinancialsApi.BaseUrl}.");
-                yield break;
-            }
-
-            FinancialsApi.BaseUrl = configured;
+            string line = www.downloadHandler.text.Trim();
+            if (line.Length > 0) apply(line);
         }
-
-        Debug.Log($"[IndustryCatalog] Financial database at {FinancialsApi.BaseUrl}.");
     }
 
     private IEnumerator ListIndustries()
@@ -97,6 +94,7 @@ public class IndustryCatalog : MonoBehaviour
 
         using (UnityWebRequest www = UnityWebRequest.Get(url))
         {
+            FinancialsApi.Authorize(www);
             yield return www.SendWebRequest();
 
             if (www.result != UnityWebRequest.Result.Success)

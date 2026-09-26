@@ -33,7 +33,6 @@ public static class StateChannel
         if (InAgentCall)
         {
             _agentBatch.Add(what);
-            EpisodicMemory.Record("action", what);
             return;
         }
 
@@ -41,7 +40,6 @@ public static class StateChannel
 
         _userQueue.Add(what);
         while (_userQueue.Count > MaxUserQueue) _userQueue.RemoveAt(0);
-        EpisodicMemory.Record("user_action", what);
         Gemini.RequestActionPush();
     }
 

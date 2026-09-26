@@ -12,8 +12,6 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
         public string column;
         [Doc("Which year of a paired metric to read, such as '2019'. Leave it out to get both years."), Optional]
         public string year;
-        [Doc("A sheet id from ListDatasets, to read only that piece. Omit to read the whole dataset."), Optional]
-        public int? sheet;
     }
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
@@ -29,28 +27,17 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
                       "This is the source for anything numeric: read the values you need and work out totals, averages, " +
                       "differences, percentages and comparisons from them. " +
                       "Values are exact; the spreadsheet the user sees abbreviates them (1.2M), so round when you read " +
-                      "one aloud. Pass 'sheet' to read one piece of a sliced sheet; omit it for the whole dataset.",
+                      "one aloud.",
         Parameters = ParametersFor(typeof(Args))
     };
 
     protected override void Run(Args args, Dictionary<string, object> result) {
         var data = Scene.Data;
         var mgr = Scene.Sheets;
-        if (data == null || mgr == null || !mgr.IsBuilt) { result["error"] = "No sheet in scene."; return; }
+        if (data == null || mgr == null) { result["error"] = "No sheet in scene."; return; }
 
-        int id = args.sheet ?? ManageSheets.WholeSheetId;
-        bool whole = id == ManageSheets.WholeSheetId;
-        CreateSheet piece = whole ? null : mgr.SheetById(id);
-
-        if (!whole && piece == null) {
-            result["error"] = $"There is no sheet #{id} on the open dataset; call ListDatasets for current ids.";
+        if (!TryResolveTargetBounds(result, out int rowMin, out int rowMax, out int colMin, out int colMax))
             return;
-        }
-
-        int rowMin = piece != null ? piece.rowMin : 0;
-        int rowMax = piece != null ? piece.rowMax : mgr.RowCount - 1;
-        int colMin = piece != null ? piece.colMin : 0;
-        int colMax = piece != null ? piece.colMax : mgr.ColCount - 1;
 
         bool hasRow = !string.IsNullOrWhiteSpace(args.row);
         bool hasColumn = !string.IsNullOrWhiteSpace(args.column);
@@ -72,8 +59,6 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
             result["error"] = "'year' picks one column of a metric, so give 'column' as well.";
             return;
         }
-
-        if (piece != null) result["sheet"] = id;
 
         bool wholeRows = rowMin == 0 && rowMax == mgr.RowCount - 1;
         bool wholeColumns = colMin == 0 && colMax == mgr.ColCount - 1;

@@ -4,14 +4,12 @@ using Google.GenAI.Types;
 public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
 
     public class Args {
-        [Doc("Which row or column to pull: its name, or its 1-based position within the piece."), Optional]
+        [Doc("Which row or column to pull: its name, or its 1-based position on the sheet."), Optional]
         public string index;
 [Doc("Whether this works on columns or rows. Leave it out when the name you gave already says which."), Values("columns", "rows"), Optional]
         public string axis;
         [Doc("Raise several strips in one go: each a name or 1-based position. Use this instead of calling repeatedly."), Optional]
         public string[] indexes;
-        [Doc("Target piece (when the sheet is sliced)."), Optional]
-        public int? sheet;
         [Doc("Pick the line by its numbers instead of by name: the tool reads them itself. " +
              "Use this for requests like 'show me the best month' rather than reading the values first."), Optional]
         public Of of;
@@ -38,8 +36,7 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
                       "on the undo timeline, and follows its values through a Sort reorder. Several can stand at once. " +
                       "Pass 'of' to pick the line by its numbers: 'measure' (sum, average, max, min), 'pick' " +
                       "(highest or lowest) and 'count' for the top few; the tool reads them itself, so " +
-                      "profiling the strongest line, or the top three, is one call with no separate read. " +
-                      "Pass 'sheet' when the sheet is sliced.",
+                      "profiling the strongest line, or the top three, is one call with no separate read.",
         Parameters = ParametersFor(typeof(Args))
     };
 
@@ -54,7 +51,7 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
         var mgr = Scene.Sheets;
         if (mgr == null || !mgr.IsBuilt) { result["error"] = "No sheet in scene."; return; }
 
-        if (!TryResolveTargetBounds(args.sheet, result, out int rowMin, out int rowMax, out int colMin, out int colMax, out int pieceId))
+        if (!TryResolveTargetBounds(result, out int rowMin, out int rowMax, out int colMin, out int colMax))
             return;
 
         int lineMin = columns ? colMin : rowMin;
@@ -75,10 +72,15 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
             wanted.Add(single);
         }
 
-        // 'wanted' holds blocks; a paired metric raises a strip for each of its years.
+        // 'wanted' holds blocks; one strip raises a whole paired metric, so any
+        // line inside the block stands for it.
         var data = Scene.Data;
         int blockMin = data != null ? data.GroupOf(columns, lineMin) : lineMin;
-        List<int> lines = ExpandBlocks(columns, wanted, lineMin, lineMax);
+        var lines = new List<int>(wanted.Count);
+        foreach (int block in wanted) {
+            BlockSpan(columns, block, lineMin, lineMax, out int lo, out _);
+            lines.Add(lo);
+        }
 
         var raised = new List<object>();
         bool ok = RunGrouped(lines.Count, i => {
@@ -100,7 +102,6 @@ public sealed class CallProfileTool : AgenticTool<CallProfileTool.Args> {
 
         result["projected"] = columns ? "column" : "row";
         result["indexes"] = raised;
-        if (pieceId > 0) result["sheet"] = pieceId;
     }
 
     private static bool PickLines(Of of, bool columns, int lineMin, int lineMax, int crossMin, int crossMax,

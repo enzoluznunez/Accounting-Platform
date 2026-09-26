@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-public enum ToolType { None, Filter, Slice, Color, Move, Sort, Rotate, Scale, Profile }
+public enum ToolType { None, Filter, Move, Sort, Rotate, Scale, Profile }
 
 public class ManageTools : MonoBehaviour
 {
@@ -123,7 +123,6 @@ public class ManageTools : MonoBehaviour
                     if (sortRows) StalePositions.MarkDirty(false);
                     if (sortColumns) StalePositions.MarkDirty(true);
                 }
-                PiecesFact.Update();
                 StateChannel.Record("Undo", inGroup > 1
                     ? $"undid the {kindName} edit ({inGroup} steps, one action)"
                     : $"undid the {kindName} edit");
@@ -160,7 +159,6 @@ public class ManageTools : MonoBehaviour
             StalePositions.MarkDirty(false);
             StalePositions.MarkDirty(true);
         }
-        PiecesFact.Update();
         if (had > 0) StateChannel.Record("Undo", $"undid all {had} edits");
     }
 }

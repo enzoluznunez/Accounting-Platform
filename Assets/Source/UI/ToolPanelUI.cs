@@ -32,16 +32,20 @@ public class ToolPanelUI : PanelUI
     private ButtonList _assistantSpeedRow;
     private int _assistantSpeedIndex;
 
+    // The order the tiles appear in, and the only thing that decides it: the grid
+    // is filled in this order regardless of how the buttons sit in the scene. The
+    // first row moves the sheet around the room, the second changes what it shows,
+    // and the assistant spans the third — so a row is one kind of verb and the
+    // grouping needs no label to explain it.
     public static readonly ToolType[] Tools =
     {
-        ToolType.Filter,
-        ToolType.Slice,
         ToolType.Move,
         ToolType.Rotate,
         ToolType.Scale,
-        ToolType.Color,
-        ToolType.Sort,
-        ToolType.Profile
+
+        ToolType.Profile,
+        ToolType.Filter,
+        ToolType.Sort
     };
 
     public static string Label(ToolType tool) => tool.ToString();
@@ -50,23 +54,18 @@ public class ToolPanelUI : PanelUI
     {
         switch (tool)
         {
-            case ToolType.Filter:
-                return "The Filter tool lets you choose which metrics the sheet shows. " +
-                       "Tap one to take it off the sheet, tap it again to bring it back.";
-            case ToolType.Slice:
-                return "The Slice tool lets you break a sheet apart by touching the gap between two columns or two rows.";
-            case ToolType.Color:
-                return "The Color tool lets you change a sheet's color by selecting a color and touching the bars.";
             case ToolType.Move:
-                return "The Move tool lets you move a sheet by grabbing it with one hand.";
+                return "Slides the sheet through the room, so you can stand where you want and bring the numbers to you. Grab it anywhere with one hand and carry it there.";
             case ToolType.Rotate:
-                return "The Rotate tool lets you rotate a sheet by grabbing it with both hands and twisting.";
+                return "Turns the sheet on the spot, so you can read it from another side without walking around it. Grab it with both hands and twist to the angle you want.";
             case ToolType.Scale:
-                return "The Scale tool lets you resize a sheet by grabbing it with both hands and moving them apart or together.";
-            case ToolType.Sort:
-                return "The Sort tool lets you pinch a row or column and slide it to reorder the sheet. Grab beside its label, or anywhere along it.";
+                return "Resizes the sheet, from a tabletop model up to a wall you stand inside. Grab it with both hands, then move them apart to enlarge it or together to shrink it.";
             case ToolType.Profile:
-                return "The Profile tool lets you press a cube and sweep along a row or column to lift it out and read its statistics.";
+                return "Lifts one row or column clear of the sheet and reports its count, range, average and total. Press a bar, then sweep your finger along the line you want raised.";
+            case ToolType.Sort:
+                return "Reorders the rows or the metrics, so the ones you are comparing sit side by side. Pinch a line beside its label, or anywhere along it, and slide it into place.";
+            case ToolType.Filter:
+                return "Chooses what stands on the sheet, narrowing it to what you asked for. Open By Company or By Metric, then poke a bar to take that line off the sheet, or tap a name in the list; a filled square means it is showing, and tapping it again brings it back.";
             default:
                 return string.Empty;
         }
@@ -78,23 +77,12 @@ public class ToolPanelUI : PanelUI
         public UIButton.Handle Handle;
     }
 
-    private class SwatchGrid
-    {
-        public ButtonList List;
-        public LayoutElement Host;
-        public int Columns;
-        public float PadX;
-        public float ResolvedWidth;
-    }
-
     private class OptionsCard
     {
         public GameObject Root;
         public RectTransform Rect;
         public Transform Content;
     }
-
-    private readonly Dictionary<ToolType, SwatchGrid> _swatchGrids = new Dictionary<ToolType, SwatchGrid>();
 
     private void Awake()
     {
@@ -230,7 +218,12 @@ public class ToolPanelUI : PanelUI
                 continue;
             }
 
+            // Tools is the order, so the tile is moved to where the list puts it
+            // rather than left wherever the scene happened to hold it.
+            btnT.SetSiblingIndex(i);
+
             UIButton.Handle h = UIButton.Adopt(btnT.gameObject);
+            StyleTileLabel(h);
             ToolButtonVisual visual = new ToolButtonVisual { Tool = tool, Handle = h };
             _toolButtons.Add(visual);
 
@@ -241,7 +234,44 @@ public class ToolPanelUI : PanelUI
         }
 
         BindAssistantButton(toolGrid);
+        DropUnboundTiles(toolGrid);
         SquareTiles(toolGrid.GetComponent<GridLayoutGroup>());
+    }
+
+    // A tile carries its label at the panel's title weight: at the size a tile is
+    // drawn, body text reads as a caption someone forgot to finish.
+    private static void StyleTileLabel(UIButton.Handle h)
+    {
+        if (h != null) Style.ApplyTitle(h.Text);
+    }
+
+    // A tool that has been removed can leave its tile behind in the scene, where
+    // nothing binds it: it keeps whatever styling it was saved with, answers to
+    // no press, and still takes a cell from the ones that work. The grid holds
+    // the tiles this panel built and nothing else.
+    private void DropUnboundTiles(Transform toolGrid)
+    {
+        for (int i = toolGrid.childCount - 1; i >= 0; i--)
+        {
+            GameObject child = toolGrid.GetChild(i).gameObject;
+            if (child == _assistantButton.Root || IsBoundTile(child)) continue;
+
+            Debug.LogWarning($"[ToolPanelUI] '{child.name}' under ToolGrid matches no tool in Tools; " +
+                             "dropping it from the grid.");
+
+            // Destroy lands at the end of the frame, so the tile is taken out of
+            // the layout and renamed now rather than counted for another pass.
+            child.SetActive(false);
+            child.name += "_Unbound";
+            Destroy(child);
+        }
+    }
+
+    private bool IsBoundTile(GameObject go)
+    {
+        for (int i = 0; i < _toolButtons.Count; i++)
+            if (_toolButtons[i].Handle.Root == go) return true;
+        return false;
     }
 
     private void SquareTiles(GridLayoutGroup grid)
@@ -292,7 +322,9 @@ public class ToolPanelUI : PanelUI
         LayoutRebuilder.ForceRebuildLayoutImmediate(_panelRootRect);
 
         int columns = Mathf.Max(1, _toolGrid.constraintCount);
-        int rows = Mathf.Max(1, Mathf.CeilToInt(_toolGrid.transform.childCount / (float)columns));
+        int span = Mathf.Min(AssistantSpan, columns);
+        int cells = _toolButtons.Count + span;
+        int rows = Mathf.Max(1, Mathf.CeilToInt(cells / (float)columns));
 
         float byWidth = (gridRect.rect.width - _toolGrid.padding.left - _toolGrid.padding.right
             - (columns - 1) * _toolGrid.spacing.x) / columns;
@@ -300,15 +332,95 @@ public class ToolPanelUI : PanelUI
             - (rows - 1) * _toolGrid.spacing.y) / rows;
 
         float cell = Mathf.Max(1f, Mathf.Min(byWidth, byHeight));
-        if (Mathf.Approximately(cell, _toolGrid.cellSize.x)) return;
+        if (!Mathf.Approximately(cell, _toolGrid.cellSize.x))
+            _toolGrid.cellSize = new Vector2(cell, cell);
 
-        _toolGrid.cellSize = new Vector2(cell, cell);
+        RoundTiles(cell);
+        PlaceAssistantTile(cell, columns, span);
     }
+
+    // The corner a tile is cut with follows the size it ended up at, so a panel
+    // that fits its tiles to the room it has does not end up with the corners of
+    // a larger one. SetRadius sits out a tile that is already cut to size.
+    private void RoundTiles(float cell)
+    {
+        float radius = Style.TileRadius(cell);
+
+        for (int i = 0; i < _toolButtons.Count; i++)
+            UIButton.SetRadius(_toolButtons[i].Handle, radius);
+
+        UIButton.SetRadius(_assistantButton, radius);
+    }
+
+    // How many cells the assistant tile covers. The tools fill the grid a cell at
+    // a time; this one takes the rest of the row they end on, so the block stays
+    // rectangular instead of trailing an empty cell.
+    private const int AssistantSpan = 3;
 
     private void BindAssistantButton(Transform toolGrid)
     {
         _assistantButton = UIButton.Create(toolGrid, "Tool_Assistant", "Assistant");
         _assistantButton.Button.onClick.AddListener(OnAssistantClicked);
+        StyleTileLabel(_assistantButton);
+
+        // A grid lays out every child at one cell, and a cell is what this tile is
+        // not. Opting out of the layout leaves it to FitTiles to place, from the
+        // same cell size and spacing the grid gave the tools.
+        RectTransform rect = _assistantButton.Root.GetComponent<RectTransform>();
+        LayoutElement le = _assistantButton.Root.GetComponent<LayoutElement>();
+        if (le == null) le = _assistantButton.Root.AddComponent<LayoutElement>();
+        le.ignoreLayout = true;
+
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+    }
+
+    private void PlaceAssistantTile(float cell, int columns, int span)
+    {
+        if (_assistantButton.Root == null || _toolGrid == null) return;
+
+        RectTransform rect = _assistantButton.Root.GetComponent<RectTransform>();
+        if (rect == null) return;
+
+        // The tiles the grid arranges are exactly the bound ones: DropUnboundTiles
+        // clears out everything else, and the assistant opts out with ignoreLayout.
+        int at = _toolButtons.Count;
+
+        // The tile has to sit whole: when the row the tools end on cannot hold it,
+        // it starts the next one.
+        int row = at / columns;
+        int column = at % columns;
+        if (column + span > columns) { row++; column = 0; }
+
+        float pitchX = cell + _toolGrid.spacing.x;
+        float pitchY = cell + _toolGrid.spacing.y;
+
+        rect.sizeDelta = new Vector2(span * cell + (span - 1) * _toolGrid.spacing.x, cell);
+        rect.anchoredPosition = new Vector2(
+            _toolGrid.padding.left + ColumnInset(cell, columns) + column * pitchX,
+            -(_toolGrid.padding.top + row * pitchY));
+    }
+
+    // Square cells rarely fill the width they are given, and the grid centres the
+    // columns in what is left over. This tile is placed by hand, so it has to be
+    // told about that gutter or it starts a tile's width left of the column it
+    // belongs under.
+    private float ColumnInset(float cell, int columns)
+    {
+        RectTransform gridRect = _toolGrid.transform as RectTransform;
+        if (gridRect == null) return 0f;
+
+        TextAnchor at = _toolGrid.childAlignment;
+        bool centred = at == TextAnchor.UpperCenter || at == TextAnchor.MiddleCenter ||
+                       at == TextAnchor.LowerCenter;
+        if (!centred) return 0f;
+
+        float columnsWidth = columns * cell + (columns - 1) * _toolGrid.spacing.x;
+        float free = gridRect.rect.width - _toolGrid.padding.left - _toolGrid.padding.right
+            - columnsWidth;
+
+        return Mathf.Max(0f, free * 0.5f);
     }
 
     private void OnAssistantClicked()
@@ -413,7 +525,7 @@ public class ToolPanelUI : PanelUI
         layout.childForceExpandHeight = false;
 
         AddHeader(content, "Assistant");
-        AddDescription(content, "The Assistant works the tools for you by voice. Pick how fast its actions play out.");
+        AddDescription(content, "Works the tools for you by voice: ask for a sheet, a sort or a filter and it carries the request out. Pick how fast its actions play out on screen.");
 
         var buttons = new (string, string, UnityEngine.Events.UnityAction)[AssistantSpeedLabels.Length];
         for (int i = 0; i < AssistantSpeedLabels.Length; i++)
@@ -421,7 +533,7 @@ public class ToolPanelUI : PanelUI
             int captured = i;
             buttons[i] = ("AssistantSpeed_" + i, AssistantSpeedLabels[i], () => OnAssistantSpeedClicked(captured));
         }
-        _assistantSpeedRow = AddToggleRowIn(content, "AssistantSpeedRow", buttons);
+        _assistantSpeedRow = AddToggleRowIn(content, "AssistantSpeedRow", true, buttons);
         _assistantSpeedRow?.SetSelected(0);
 
         content.SetActive(false);
@@ -656,10 +768,6 @@ public class ToolPanelUI : PanelUI
 
         if (!UIMeasure.TryPreferredHeight(card.Rect, paneRect, out float contentHeight)) return;
 
-        if (card == _toolCard && toolManager != null &&
-            ResolveSwatchGrid(toolManager.SelectedTool, paneRect) &&
-            !UIMeasure.TryPreferredHeight(card.Rect, paneRect, out contentHeight)) return;
-
         Vector2 size = card.Rect.sizeDelta;
         size.y = Mathf.Min(contentHeight + Style.SmallPadding, Style.Subpanel.y);
         card.Rect.sizeDelta = size;
@@ -760,7 +868,33 @@ public class ToolPanelUI : PanelUI
     private GameObject GetToolContent(ToolType tool) =>
         _toolContents.TryGetValue(tool, out GameObject go) ? go : null;
 
-    private ButtonList AddToggleRowIn(GameObject content, string rowName,
+    // A row of buttons a tool can ask for: one press each, sized to share the
+    // width. 'belowHeader' puts it above the description, which is where the
+    // assistant's own speed row belongs; a tool's row goes last, under whatever
+    // it has already added.
+    public ButtonList AddToggleRow(ToolType tool, string rowName,
+        params (string name, string label, UnityEngine.Events.UnityAction onClick)[] buttons)
+    {
+        GameObject content = GetToolContent(tool);
+        if (content == null) return null;
+
+        ReplaceNamed(content.transform, rowName);
+        return AddToggleRowIn(content, rowName, false, buttons);
+    }
+
+    // Destroy is deferred to the end of the frame, so whatever is being replaced
+    // is renamed out of the way first: until it is actually gone it would still
+    // answer to the name the replacement is about to take.
+    private void ReplaceNamed(Transform parent, string name)
+    {
+        Transform existing = parent.Find(name);
+        if (existing == null) return;
+
+        existing.name = name + "_Old";
+        Destroy(existing.gameObject);
+    }
+
+    private ButtonList AddToggleRowIn(GameObject content, string rowName, bool belowHeader,
         params (string name, string label, UnityEngine.Events.UnityAction onClick)[] buttons)
     {
         if (content == null) return null;
@@ -777,7 +911,8 @@ public class ToolPanelUI : PanelUI
             sizing = ButtonList.Sizing.Equal
         });
 
-        InsertBelowHeader(content, row.transform);
+        if (belowHeader) InsertBelowHeader(content, row.transform);
+        else row.transform.SetAsLastSibling();
 
         for (int i = 0; i < buttons.Length; i++)
             list.Add(buttons[i].name, buttons[i].label, buttons[i].onClick);
@@ -786,56 +921,9 @@ public class ToolPanelUI : PanelUI
         return list;
     }
 
-    public ButtonList AddSwatchGrid(ToolType tool, IReadOnlyList<Color> colors,
-        UnityEngine.Events.UnityAction<int> onPick)
-    {
-        GameObject content = GetToolContent(tool);
-        if (content == null || colors == null || colors.Count == 0) return null;
-
-        GameObject grid = new GameObject("SwatchGrid");
-        grid.transform.SetParent(content.transform, false);
-        RectTransform gridRect = grid.AddComponent<RectTransform>();
-
-        VerticalLayoutGroup contentLayout = content.GetComponent<VerticalLayoutGroup>();
-        float padX = contentLayout != null
-            ? contentLayout.padding.left + contentLayout.padding.right
-            : 0f;
-
-        int columns = colors.Count;
-        float cell = SwatchCell(Style.Panel.x - Style.SmallBorder * 2f - padX, columns);
-
-        LayoutElement host = UILayout.FixedHeight(grid, cell);
-
-        ButtonList list = new ButtonList(gridRect, new ButtonList.Options
-        {
-            sizing = ButtonList.Sizing.Square,
-            cellSize = cell,
-            columns = columns
-        });
-
-        for (int i = 0; i < colors.Count; i++)
-        {
-            int captured = i;
-            list.AddSwatch($"Swatch_{i}", colors[i], () => onPick?.Invoke(captured));
-        }
-
-        InsertBelowHeader(content, grid.transform);
-
-        _swatchGrids[tool] = new SwatchGrid
-        {
-            List = list,
-            Host = host,
-            Columns = columns,
-            PadX = padX
-        };
-
-        list.SetSelected(-1);
-        return list;
-    }
-
     // A scrollable column of toggles in a tool's pane, for options that are not
-    // exclusive: unlike a swatch grid or a toggle row, any number can be on, so
-    // the caller keeps the handles and lights them itself.
+    // exclusive: unlike a toggle row, any number can be on, so the caller keeps
+    // the handles and lights them itself.
     // 'name' lets one tool keep more than one list: each replaces only the list
     // it named, so rebuilding the metrics does not take the categories with it.
     public ButtonList AddOptionList(ToolType tool, float height, string name = "OptionList")
@@ -843,14 +931,7 @@ public class ToolPanelUI : PanelUI
         GameObject content = GetToolContent(tool);
         if (content == null) return null;
 
-        // Destroy is deferred to the end of the frame, so the outgoing list is
-        // renamed out of the way rather than left to answer to the same name.
-        Transform existing = content.transform.Find(name);
-        if (existing != null)
-        {
-            existing.name = name + "_Old";
-            Destroy(existing.gameObject);
-        }
+        ReplaceNamed(content.transform, name);
 
         GameObject host = new GameObject(name);
         host.transform.SetParent(content.transform, false);
@@ -872,28 +953,50 @@ public class ToolPanelUI : PanelUI
         return list;
     }
 
-    private static float SwatchCell(float innerWidth, int columns) =>
-        (innerWidth - (columns - 1) * Style.SmallPadding) / Mathf.Max(columns, 1);
-
-    private bool ResolveSwatchGrid(ToolType tool, RectTransform paneRect)
+    // A scrollable column of check rows: the label on the left, a square on the
+    // right that is filled while the thing is on the sheet. Unlike a toggle row
+    // any number can be checked, so the caller keeps the handles and sets the
+    // squares itself.
+    public ButtonList AddCheckList(ToolType tool, float height, string name = "CheckList")
     {
-        if (!_swatchGrids.TryGetValue(tool, out SwatchGrid grid)) return false;
+        GameObject content = GetToolContent(tool);
+        if (content == null) return null;
 
-        float inner = paneRect.rect.width - grid.PadX;
-        if (inner <= 0f || Mathf.Approximately(inner, grid.ResolvedWidth)) return false;
+        ReplaceNamed(content.transform, name);
 
-        float cell = SwatchCell(inner, grid.Columns);
-        if (cell <= 0f) return false;
+        GameObject host = new GameObject(name);
+        host.transform.SetParent(content.transform, false);
+        RectTransform rect = host.AddComponent<RectTransform>();
 
-        grid.List.SetCellSize(cell);
-        if (grid.Host != null)
+        UILayout.FixedHeight(host, height);
+
+        ButtonList list = new ButtonList(rect, new ButtonList.Options
         {
-            grid.Host.minHeight = cell;
-            grid.Host.preferredHeight = cell;
-        }
+            axis = ButtonList.Axis.Vertical,
+            sizing = ButtonList.Sizing.Measured,
+            alignment = TextAnchor.UpperLeft,
+            itemHeight = Style.Subbutton.y,
+            backed = true,
+            scrollable = true,
+            checkable = true
+        });
 
-        grid.ResolvedWidth = inner;
-        return true;
+        host.transform.SetAsLastSibling();
+        return list;
+    }
+
+    // A tool whose pane grew or shrank without the tool changing: the card is
+    // measured again so it closes up behind a list that was taken away.
+    public void ContentChanged() => QueueOptionsResize();
+
+    // Takes a tool's named block off its pane, for a list that is closed rather
+    // than rebuilt: the Filter tool shows one axis at a time, and the axis that
+    // is not open leaves no empty band behind it.
+    public void RemoveContent(ToolType tool, string name)
+    {
+        GameObject content = GetToolContent(tool);
+        if (content == null) return;
+        ReplaceNamed(content.transform, name);
     }
 
     private static void SizeHeader(GameObject content)

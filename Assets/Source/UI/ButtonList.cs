@@ -7,7 +7,7 @@ using TMPro;
 public class ButtonList
 {
     public enum Axis { Horizontal, Vertical }
-    public enum Sizing { Measured, Equal, Square }
+    public enum Sizing { Measured, Equal }
 
     public class Options
     {
@@ -19,10 +19,14 @@ public class ButtonList
         public float itemHeight;
         public float itemPadding = Style.ButtonTextPad;
         public bool newestFirst;
-        public float cellSize;
-        public int columns = 1;
         public bool backed;
         public bool scrollable;
+
+        // A checkable list is a column of rows rather than a row of buttons: the
+        // label sits at the left and a square at the right carries the state, so
+        // the row keeps its resting colours however it is set.
+        public bool checkable;
+        public float checkSide = Style.Body;
     }
 
     private const float EngageBleed = Style.SmallPadding;
@@ -40,11 +44,8 @@ public class ButtonList
         _options = options ?? new Options();
         _content = _options.scrollable ? BuildScroll() : _root;
 
-        if (_options.sizing == Sizing.Square) BuildGrid();
-        else BuildAxisLayout();
+        BuildAxisLayout();
     }
-
-    private GridLayoutGroup _grid;
 
     private RectTransform BuildScroll()
     {
@@ -90,23 +91,6 @@ public class ButtonList
         return content;
     }
 
-    public void SetCellSize(float cell)
-    {
-        if (_grid == null || cell <= 0f) return;
-        _grid.cellSize = new Vector2(cell, cell);
-    }
-
-    private void BuildGrid()
-    {
-        GridLayoutGroup glg = _content.gameObject.AddComponent<GridLayoutGroup>();
-        _grid = glg;
-        glg.cellSize = new Vector2(_options.cellSize, _options.cellSize);
-        glg.spacing = new Vector2(Style.SmallPadding, Style.SmallPadding);
-        glg.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        glg.constraintCount = Mathf.Max(1, _options.columns);
-        if (_options.padding != null) glg.padding = _options.padding;
-    }
-
     private void BuildAxisLayout()
     {
         HorizontalOrVerticalLayoutGroup lg = _options.axis == Axis.Vertical
@@ -134,13 +118,26 @@ public class ButtonList
 
     public UIButton.Handle Add(string name, string label, UnityAction onClick)
     {
+        // The square needs room of its own at the right end, and the label needs
+        // to stop before it rather than run underneath.
+        float padRight = _options.checkable
+            ? _options.checkSide + _options.itemPadding * 2f
+            : _options.itemPadding;
+
         UIButton.Handle h = UIButton.Create(_content, name, label,
-            flexibleWidth: _options.sizing == Sizing.Equal,
+            flexibleWidth: _options.sizing == Sizing.Equal || _options.checkable,
             height: _options.itemHeight,
-            padLeft: _options.itemPadding, padRight: _options.itemPadding);
+            alignment: _options.checkable ? TextAlignmentOptions.Left : TextAlignmentOptions.Center,
+            padLeft: _options.itemPadding, padRight: padRight);
 
         if (_options.backed) UIButton.AddBack(h);
-        if (_options.sizing == Sizing.Measured) Measure(h);
+        if (_options.checkable)
+        {
+            UIButton.AddCheck(h, _options.checkSide);
+            UIButton.SetUntinted(h);
+            Stretch(h);
+        }
+        else if (_options.sizing == Sizing.Measured) Measure(h);
         if (onClick != null) h.Button.onClick.AddListener(onClick);
         if (_options.newestFirst) h.Root.transform.SetAsFirstSibling();
 
@@ -148,22 +145,8 @@ public class ButtonList
         return h;
     }
 
-    public UIButton.Handle AddSwatch(string name, Color fill, UnityAction onClick)
-    {
-        UIButton.Handle h = UIButton.CreateSwatch(_content, name, fill);
-        if (onClick != null) h.Button.onClick.AddListener(onClick);
-        _items.Add(h);
-        return h;
-    }
-
-    public void Remeasure()
-    {
-        if (_options.sizing != Sizing.Measured) return;
-
-        MaxItemExtent = 0f;
-        for (int i = 0; i < _items.Count; i++)
-            Measure(_items[i]);
-    }
+    public UIButton.Handle At(int index) =>
+        index >= 0 && index < _items.Count ? _items[index] : null;
 
     private void Measure(UIButton.Handle h)
     {
@@ -183,6 +166,17 @@ public class ButtonList
         UILayout.Clear(_content);
         _items.Clear();
         MaxItemExtent = 0f;
+    }
+
+    // A check row spans the list whatever its label measures to, so the squares
+    // line up down the right edge instead of stepping in with the text.
+    private static void Stretch(UIButton.Handle h)
+    {
+        LayoutElement le = h.Root.GetComponent<LayoutElement>();
+        if (le == null) return;
+        le.preferredWidth = -1f;
+        le.minWidth = -1f;
+        le.flexibleWidth = 1f;
     }
 
     public void SetSelected(int activeIndex)

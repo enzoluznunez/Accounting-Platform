@@ -11,6 +11,8 @@ public static class UIButton
         public Image Frame;
         public Image Inner;
         public Image Back;
+        public Image CheckFrame;
+        public Image CheckFill;
         public TextMeshProUGUI Text;
         public PointerHighlight Highlight;
         public float Radius;
@@ -43,27 +45,11 @@ public static class UIButton
 
     public static Handle Adopt(GameObject root,
         TextAlignmentOptions alignment = TextAlignmentOptions.Center,
-        float padLeft = Style.ButtonTextPad, float padRight = Style.ButtonTextPad)
+        float padLeft = Style.ButtonTextPad, float padRight = Style.ButtonTextPad,
+        float radius = Style.OutRadius)
     {
         Handle h = new Handle { Root = root };
-        Build(h, null, alignment, padLeft, padRight, Style.OutRadius);
-        return h;
-    }
-
-    public static Handle CreateSwatch(Transform parent, string name, Color fill)
-    {
-        GameObject root = new GameObject(name);
-        root.transform.SetParent(parent, false);
-        root.AddComponent<RectTransform>();
-
-        Handle h = new Handle { Root = root };
-        Build(h, null, TextAlignmentOptions.Center, 0f, 0f, Style.OutRadius);
-
-        h.Text.gameObject.SetActive(false);
-
-        h.Inner.color = fill;
-
-        SetStateTarget(h, h.Frame, fill, Style.Black, Style.Black, Style.White);
+        Build(h, null, alignment, padLeft, padRight, radius);
         return h;
     }
 
@@ -89,6 +75,76 @@ public static class UIButton
 
         h.Back = back;
         return back;
+    }
+
+    // Re-rounds a button that has been resized since it was built: the frame, the
+    // inner fill and the back all carry the same corner, so they are re-cut
+    // together or the borders stop tracking one another.
+    public static void SetRadius(Handle h, float radius)
+    {
+        if (h == null || h.Root == null || Mathf.Approximately(h.Radius, radius)) return;
+        h.Radius = radius;
+
+        if (h.Frame != null) RoundedSprite.Apply(h.Frame, radius);
+        if (h.Inner != null) RoundedSprite.Apply(h.Inner, Style.InnerRadius(radius));
+
+        if (h.Back == null) return;
+        RoundedSprite.Apply(h.Back, radius);
+        Material backMat = PanelUI.BackMaterial;
+        if (backMat != null) h.Back.material = backMat;
+    }
+
+    // A square at the right end of a row, drawn the way every other surface here
+    // is: a black frame with a fill inside it. Unchecked leaves the fill the
+    // colour of the row, so the square reads as an outline; checked fills it
+    // black. The square is the only thing that carries the state, so a checked
+    // row keeps its ordinary background.
+    public static Image AddCheck(Handle h, float side)
+    {
+        if (h == null || h.Root == null) return null;
+        if (h.CheckFrame != null) return h.CheckFrame;
+
+        RectTransform rt = EnsureChild(h.Root.transform, "Check");
+        rt.anchorMin = new Vector2(1f, 0.5f);
+        rt.anchorMax = new Vector2(1f, 0.5f);
+        rt.pivot = new Vector2(1f, 0.5f);
+        rt.sizeDelta = new Vector2(side, side);
+        rt.anchoredPosition = new Vector2(-Style.ButtonTextPad, 0f);
+
+        Image frame = Ensure<Image>(rt.gameObject);
+        RoundedSprite.Apply(frame, 0f);
+        frame.color = Style.Black;
+        frame.raycastTarget = false;
+        h.CheckFrame = frame;
+
+        RectTransform fillRt = EnsureChild(rt, "Fill");
+        fillRt.anchorMin = Vector2.zero;
+        fillRt.anchorMax = Vector2.one;
+        fillRt.offsetMin = new Vector2(Style.SmallBorder, Style.SmallBorder);
+        fillRt.offsetMax = new Vector2(-Style.SmallBorder, -Style.SmallBorder);
+        Image fill = Ensure<Image>(fillRt.gameObject);
+        RoundedSprite.Apply(fill, 0f);
+        fill.raycastTarget = false;
+        h.CheckFill = fill;
+
+        SetChecked(h, false);
+        return frame;
+    }
+
+    public static void SetChecked(Handle h, bool on)
+    {
+        if (h == null || h.CheckFill == null) return;
+        h.CheckFill.color = on ? Style.Black : Style.White;
+    }
+
+    // Holds a button at its resting colours, so pressing it swells the button
+    // without inverting it. A checked row would otherwise flip to black under the
+    // finger and take the square's meaning with it: an unchecked square on a
+    // black row reads as a filled one.
+    public static void SetUntinted(Handle h)
+    {
+        if (h == null || h.Inner == null) return;
+        SetStateTarget(h, h.Inner, Style.White, Style.White, Style.Black, Style.Black);
     }
 
     public static void SetSelected(Handle h, bool selected)

@@ -32,6 +32,15 @@ public abstract class Tool : MonoBehaviour
         if (sheetManager != null) sheetManager.ClearHoverTint();
     }
 
+    // Lights the line under the finger: one row, or on a grouped column axis the
+    // whole metric the column belongs to.
+    protected void TintLine(ReadSheets.Reading reading, bool columns, float swell = Style.PreviewSwell)
+    {
+        int lo = reading.visRow, hi = reading.visRow;
+        if (columns) sheetManager.ColumnStripSpan(reading.sheet, reading.visCol, out lo, out hi);
+        sheetManager.SetLineTint(reading.sheet, columns ? 1 : 2, lo, hi, swell);
+    }
+
     private bool _listening;
 
     private void ListenSheets(bool on)

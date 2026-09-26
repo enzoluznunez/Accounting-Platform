@@ -98,7 +98,7 @@ public class ScaleTool : Tool
         float distance = sheetManager.transform
             .TransformVector(sheet.transform.localPosition - prePos).magnitude;
 
-        Report($"resized piece {sheet.sheetId}");
+        Report("resized the sheet");
 
         ManageDatasets.ActiveEdits.PushMove(new MoveRecord
         {

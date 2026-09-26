@@ -78,13 +78,15 @@ public class Parser : DataSource
         string[] lines = csvText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
 
         int groupSize = 1;
+        var categories = new List<string>();
+        var colors = new List<string>();
         List<List<string>> grid = new List<List<string>>(lines.Length);
         foreach (string line in lines)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
             if (grid.Count == 0 && line.TrimStart().StartsWith("#", StringComparison.Ordinal))
             {
-                ReadDirective(line, ref groupSize);
+                ReadDirective(line, ref groupSize, categories, colors);
                 continue;
             }
             grid.Add(ParseCSVLine(line));
@@ -109,17 +111,25 @@ public class Parser : DataSource
         }
         SetColumnGroupSize(groupSize);
 
-        int skipped = 0;
-        for (int g = grid.Count - 1; g >= 1; g--)
+        // The '#industry' and '#color' directives carry one value per data row as
+        // the server wrote them, so dropping a short row here has to drop its
+        // place in them too. Keeping each survivor's original position is what
+        // lets the rest of the sheet keep its colour.
+        int sourceRows = grid.Count - 1;
+        var rows = new List<List<string>>(sourceRows);
+        var sourceRow = new List<int>(sourceRows);
+        for (int g = 1; g < grid.Count; g++)
         {
-            if (grid[g].Count >= header.Count) continue;
-            grid.RemoveAt(g);
-            skipped++;
+            if (grid[g].Count < header.Count) continue;
+            sourceRow.Add(g - 1);
+            rows.Add(grid[g]);
         }
+
+        int skipped = sourceRows - rows.Count;
         if (skipped > 0)
             Debug.LogWarning($"[Parser:{name}] Skipped {skipped} row(s) shorter than the {header.Count}-column header.");
 
-        int rowCount = grid.Count - 1;
+        int rowCount = rows.Count;
         int colCount = _columnTitles.Count;
 
         if (rowCount == 0 || colCount == 0)
@@ -130,13 +140,15 @@ public class Parser : DataSource
 
         for (int r = 0; r < rowCount; r++)
         {
-            List<string> fields = grid[r + 1];
+            List<string> fields = rows[r];
             _rowTitles.Add(fields.Count > 0 ? fields[0].Trim() : "");
         }
 
+        SetRowCategories(categories, colors, sourceRows, sourceRow);
+
         int numericCells = FillGrid(rowCount, colCount, (r, c) =>
         {
-            List<string> fields = grid[r + 1];
+            List<string> fields = rows[r];
             string field = (c + 1 < fields.Count) ? fields[c + 1] : null;
             return TryParseFloat(field, out float v) ? v : (float?)null;
         });
@@ -172,21 +184,75 @@ public class Parser : DataSource
         return i < text.Length && text[i] == '<';
     }
 
-    // Directive lines sit above the header and configure the grid. Only
-    // '#group N' is understood; anything else is ignored so a file may carry
-    // comments without becoming a row.
-    private void ReadDirective(string line, ref int groupSize)
+    // Directive lines sit above the header and configure the grid. '#group N'
+    // says how many columns belong to one metric; '#industry' and '#color' carry
+    // one value per data row, in row order. Anything else is ignored, so a file
+    // may carry comments without becoming a row and a sheet from an older server
+    // still loads — just without colour.
+    private void ReadDirective(string line, ref int groupSize,
+                               List<string> categories, List<string> colors)
     {
         string body = line.TrimStart().TrimStart('#').Trim();
-        if (!body.StartsWith("group", StringComparison.OrdinalIgnoreCase)) return;
 
-        string value = body.Substring("group".Length).Trim();
+        if (TryBody(body, "industry", out string listed))
+        {
+            categories.Clear();
+            categories.AddRange(ParseCSVLine(listed));
+            return;
+        }
+
+        if (TryBody(body, "color", out listed))
+        {
+            colors.Clear();
+            colors.AddRange(ParseCSVLine(listed));
+            return;
+        }
+
+        if (!TryBody(body, "group", out string value)) return;
+
         if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int size) && size > 1)
         {
             groupSize = size;
             return;
         }
         Debug.LogWarning($"[Parser:{name}] Ignored unreadable directive '{line.Trim()}'.");
+    }
+
+    private static bool TryBody(string body, string name, out string rest)
+    {
+        rest = null;
+        if (!body.StartsWith(name, StringComparison.OrdinalIgnoreCase)) return false;
+
+        rest = body.Substring(name.Length).Trim();
+        return true;
+    }
+
+    // A row's category and its colour only mean anything together and only if
+    // there is exactly one of each per row: a sheet whose directives disagree
+    // with its rows is drawn uncoloured rather than coloured by a guess.
+    // 'sourceRows' is how many data rows the directives were written for, and
+    // 'sourceRow' says where each row that survived stood among them.
+    private void SetRowCategories(List<string> categories, List<string> colors,
+        int sourceRows, List<int> sourceRow)
+    {
+        _rowCategories.Clear();
+        _rowColors.Clear();
+        if (categories.Count == 0 && colors.Count == 0) return;
+
+        if (categories.Count != sourceRows || colors.Count != sourceRows)
+        {
+            Debug.LogWarning($"[Parser:{name}] Ignored the industry directives: " +
+                             $"{categories.Count} industries and {colors.Count} colors " +
+                             $"for {sourceRows} rows.");
+            return;
+        }
+
+        for (int r = 0; r < sourceRow.Count; r++)
+        {
+            int at = sourceRow[r];
+            _rowCategories.Add(categories[at].Trim());
+            _rowColors.Add(ColorUtility.TryParseHtmlString(colors[at].Trim(), out Color c) ? c : Color.white);
+        }
     }
 
     private void SetAxisTitles(string corner)
@@ -217,6 +283,8 @@ public class Parser : DataSource
     {
         _columnTitles.Clear();
         _rowTitles.Clear();
+        _rowCategories.Clear();
+        _rowColors.Clear();
         _columnAxisTitle = null;
         _rowAxisTitle = null;
         _values = new float[0, 0];

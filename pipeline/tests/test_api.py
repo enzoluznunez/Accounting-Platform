@@ -1,5 +1,3 @@
-import csv
-import io
 
 import pandas as pd
 import pytest
@@ -10,7 +8,7 @@ from metrics import DIVISION_NAMES, RATIOS, SIZE_METRIC, YEARS, division
 
 @pytest.fixture(scope="module")
 def default_sheet(client):
-    return client.get("/sheet?sic=7370&limit=5").text.splitlines()
+    return client.get("/sheet?sic=7370&limit=5").text
 
 
 def test_health_reports_loaded_rows(client):
@@ -45,7 +43,7 @@ def test_industries_lists_one_row_per_division(client):
 def test_a_sheet_can_be_opened_by_division(client):
     text = client.get("/sheet?division=Mining&limit=200").text
     assert text.startswith("#group 2")
-    assert len(text.splitlines()) - 2 == 72
+    assert len(sheetcsv.read(text)[2]) == 72
 
 
 def test_a_division_holds_its_sic_codes(client, companies):
@@ -54,7 +52,7 @@ def test_a_division_holds_its_sic_codes(client, companies):
     rather than against the division's sheet, which the row cap would truncate.
     """
     slice_ = set(names_on(client.get("/sheet?sic=7370&limit=200").text))
-    services = set(companies[companies.sic_code.map(division) == "Services"].name)
+    services = set(companies[companies.sic_code.map(division) == "Services"].ticker)
     assert slice_ and slice_ <= services
 
 
@@ -73,25 +71,25 @@ def test_naming_no_industry_gives_every_industry(client):
 
 
 def test_sheet_starts_with_group_directive(default_sheet):
-    assert default_sheet[0] == "#group 2"
+    assert sheetcsv.read(default_sheet)[0]["group"] == ["2"]
 
 
 def test_sheet_column_count_is_metrics_times_years(client):
     text = client.get("/sheet?sic=7370&metrics=current_ratio,net_margin&years=2019,2020&limit=5").text
-    header = text.splitlines()[1].split(",")
+    header = sheetcsv.read(text)[1]
     assert header[0] == "Company"
     assert len(header) == 1 + 2 * 2
 
 
 def test_sheet_column_count_divides_by_group_size(default_sheet):
-    group_size = int(default_sheet[0].split()[1])
-    metric_columns = len(default_sheet[1].split(",")) - 1
-    assert metric_columns % group_size == 0
+    directives, header, _ = sheetcsv.read(default_sheet)
+    metric_columns = len(header) - 1
+    assert metric_columns % int(directives["group"][0]) == 0
 
 
 def test_sheet_respects_limit(client):
     text = client.get("/sheet?sic=7370&limit=3").text
-    assert len(text.splitlines()) == 2 + 3
+    assert len(sheetcsv.read(text)[2]) == 3
 
 
 def test_sheet_rejects_unknown_metric(client):
@@ -124,8 +122,8 @@ def test_sheet_returns_404_for_empty_industry(client):
 
 def test_covid_collapse_is_visible_in_travel(client):
     text = client.get("/sheet?sic=7370&metrics=net_margin&years=2019,2020&limit=30").text
-    rows = [line.split(",") for line in text.splitlines()[2:]]
-    booking = [r for r in rows if "BOOKING" in r[0].upper()]
+    rows = sheetcsv.read(text)[2]
+    booking = [r for r in rows if r[0].upper() == "BKNG"]
     assert booking, "expected Booking Holdings in computer services"
     before, after = float(booking[0][1]), float(booking[0][2])
     assert after < before / 10
@@ -135,16 +133,13 @@ def test_pivot_cell_matches_the_source_row(client, companies, ratios):
     # The round trip the shape assertions never make: one cell in the wide sheet,
     # back to the long-form row it came from.
     text = client.get("/sheet?sic=7370&metrics=net_margin,current_ratio&years=2019,2020&limit=10").text
-    header = text.splitlines()[1].split(",")
-    rows = [line.split(",") for line in text.splitlines()[2:]]
+    _, header, rows = sheetcsv.read(text)
 
-    in_industry = companies[companies["sic_code"] == 7370]
-    named = {row["name"]: row["ticker"] for _, row in in_industry.iterrows()}
     long_form = ratios.set_index(["ticker", "year"])
 
     checked = 0
     for row in rows:
-        ticker = named[row[0]]
+        ticker = row[0]
         for column, cell in zip(header[1:], row[1:]):
             metric = column.rsplit(" ", 1)[0].lower().replace(" ", "_")
             year = int(column.rsplit(" ", 1)[1])
@@ -158,61 +153,84 @@ def test_pivot_cell_matches_the_source_row(client, companies, ratios):
 
 
 def test_single_year_gives_one_column_per_metric(client):
-    lines = client.get("/sheet?sic=7370&years=2019&metrics=current_ratio,net_margin&limit=5").text.splitlines()
-    assert lines[0] == "#group 1"
-    header = lines[1].split(",")
+    text = client.get("/sheet?sic=7370&years=2019&metrics=current_ratio,net_margin&limit=5").text
+    directives, header, _ = sheetcsv.read(text)
+    assert directives["group"] == ["1"]
     assert header == ["Company", "Current Ratio 2019", "Net Margin 2019"]
 
 
 def test_every_metric_can_be_requested_at_once(client):
     text = client.get(f"/sheet?sic=7370&metrics={','.join(RATIOS)}&years=2019,2020&limit=5").text
-    header = text.splitlines()[1].split(",")
+    header = sheetcsv.read(text)[1]
     assert len(header) == 1 + len(RATIOS) * 2
 
 
 def test_years_are_sorted_and_deduplicated(client):
-    lines = client.get("/sheet?sic=7370&years=2020,2019,2020&metrics=net_margin&limit=3").text.splitlines()
-    assert lines[0] == "#group 2"
-    assert lines[1].split(",")[1:] == ["Net Margin 2019", "Net Margin 2020"]
+    text = client.get("/sheet?sic=7370&years=2020,2019,2020&metrics=net_margin&limit=3").text
+    directives, header, _ = sheetcsv.read(text)
+    assert directives["group"] == ["2"]
+    assert header[1:] == ["Net Margin 2019", "Net Margin 2020"]
 
 
 def test_companies_sharing_a_name_both_appear(client, twin):
-    # Rows are keyed by ticker; keying them by name dropped one of these.
-    rows = [line.split(",")[0] for line in client.get("/sheet?sic=7370&limit=200").text.splitlines()[2:]]
-    assert rows.count(twin) == 2
+    # Two companies share one name, and each reaches the sheet under its own
+    # ticker. Keying the rows by name dropped one of them; labelling them by
+    # ticker is also what tells the pair apart once they are both on the sheet.
+    on_sheet = names_on(client.get("/sheet?sic=7370&limit=200").text)
+    assert twin <= set(on_sheet)
 
 
 def names_on(text):
-    rows = list(csv.reader(io.StringIO(text.split("\n", 1)[1])))
-    return [row[0] for row in rows[1:] if row]
+    return [row[0] for row in sheetcsv.read(text)[2]]
 
 
-def test_companies_are_ranked_by_size(client):
-    """Largest first, ranked in SQL. Read off the rendered sheet rather than out
-    of the query, because the order the app receives is what matters."""
-    text = client.get(f"/sheet?division=Mining&metrics={SIZE_METRIC}&limit=200").text
-    rows = list(csv.reader(io.StringIO(text.split("\n", 1)[1])))
-    header, data = rows[0], [row for row in rows[1:] if row]
-
+def sizes_on(text):
+    """Each row's working capital, the figure the sheet's cut is taken on."""
+    _, header, rows = sheetcsv.read(text)
     title = sheetcsv.title(SIZE_METRIC, YEARS[0]).rsplit(" ", 1)[0]
     at = [i for i, column in enumerate(header) if column.rsplit(" ", 1)[0] == title]
     assert at, f"no {title} column"
 
-    sizes = []
-    for row in data:
+    sizes = {}
+    for row in rows:
         values = [float(row[i]) for i in at if row[i] != ""]
-        sizes.append(max(values) if values else None)
-
-    present = [size for size in sizes if size is not None]
-    assert present == sorted(present, reverse=True)
-    # Companies with no figure at all rank last, never in among the rest.
-    assert None not in sizes[: len(present)]
+        sizes[row[0]] = max(values) if values else None
+    return sizes
 
 
-def test_row_titles_are_company_names(client, companies):
-    """The first cell of every row is what the app labels that row with, so it
-    has to be a company and not a ticker or an id."""
-    names = set(companies.name)
+def test_the_sheet_is_cut_by_size(client):
+    """Size decides which companies reach a sheet. It no longer decides what order
+    they stand in, so this reads the cut rather than the ordering: the five on a
+    limit of five are the five largest of the whole industry."""
+    whole = sizes_on(client.get(f"/sheet?division=Mining&metrics={SIZE_METRIC}&limit=200").text)
+    cut = sizes_on(client.get(f"/sheet?division=Mining&metrics={SIZE_METRIC}&limit=5").text)
+
+    ranked = sorted((name for name, size in whole.items() if size is not None),
+                    key=lambda name: whole[name], reverse=True)
+    assert set(cut) == set(ranked[:5])
+
+
+def test_rows_stand_in_ticker_order(client, name_order):
+    """The row axis is the company axis: rows are ordered by the ticker they are
+    labelled with and by nothing else, so industries interleave and colour is
+    what tells them apart. The order to expect comes from the database, which is
+    what the sheet is built with; sorted() would be comparing a different
+    ordering than the one under test."""
+    names = names_on(client.get("/sheet?limit=200").text)
+    assert names
+
+    place = {}
+    for at, name in enumerate(name_order):
+        place.setdefault(name, at)
+    standing = [place[name] for name in names]
+    assert standing == sorted(standing)
+
+
+def test_row_titles_are_tickers(client, companies):
+    """The first cell of every row is what the app labels that row with. It is
+    the ticker: short enough that twenty of them stand side by side on the sheet
+    without running into one another, and unique where a name need not be."""
+    tickers = set(companies.ticker)
     on_sheet = names_on(client.get("/sheet?limit=200").text)
     assert on_sheet
-    assert set(on_sheet) <= names
+    assert set(on_sheet) <= tickers

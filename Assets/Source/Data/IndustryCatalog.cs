@@ -28,9 +28,13 @@ public class IndustryCatalog : MonoBehaviour
 
     // The shape of the sheets this lists. Both go into the URL and into the
     // company count reported for an unopened dataset, so the count cannot
-    // disagree with what opening it draws.
-    private const int SheetLimit = 30;
-    private const int PerIndustry = 3;
+    // disagree with what opening it draws. The limit comes from the generated
+    // contract, so the server's default is the single place it is set. The
+    // per-industry share is the app's own: the sheet spanning every industry is
+    // what the app opens on, and it opens on a sample — two from each — rather
+    // than the server's default, which the assistant's own queries still get.
+    private const int SheetLimit = FinancialsContract.LimitDefault;
+    private const int PerIndustry = 2;
 
     private void Start()
     {
@@ -145,12 +149,31 @@ public class IndustryCatalog : MonoBehaviour
             // shorter than the share times the count.
             spanning += Math.Min(rows[i].companies, PerIndustry);
         }
-        entries.Add((SheetUrl(null), allIndustriesLabel, Math.Min(spanning, SheetLimit)));
+        string spanningUrl = SheetUrl(null);
+        entries.Add((spanningUrl, allIndustriesLabel, Math.Min(spanning, SheetLimit)));
 
         manageDatasets.AddCatalogEntries(entries);
 
         Debug.Log($"[IndustryCatalog] Listed {rows.Count} industries and one sheet spanning them; " +
-                  "none is fetched until it is opened.");
+                  "opening the spanning sheet, the rest are fetched when asked for.");
+
+        OpenAtStartup(spanningUrl);
+    }
+
+    // The app opens on the sheet spanning every industry, a few companies from
+    // each, so there is something to look at before anyone asks for anything.
+    // Switching to an unread entry fetches it and switches once it is read.
+    private void OpenAtStartup(string url)
+    {
+        if (manageDatasets.ActiveIndex >= 0) return;
+
+        var datasets = manageDatasets.Datasets;
+        for (int i = 0; i < datasets.Count; i++)
+        {
+            if (datasets[i].payload != url) continue;
+            manageDatasets.SwitchDataset(i);
+            return;
+        }
     }
 
     // The request that draws one industry, or every industry when none is named.

@@ -31,12 +31,7 @@ public class ProfileTool : Tool
     private static bool Usable(ReadSheets.Reading reading) =>
         reading.valid && reading.cube != null && reading.sheet != null;
 
-    private void Tint(ReadSheets.Reading reading, float swell)
-    {
-        bool columns = _intent.Columns;
-        int line = columns ? reading.visCol : reading.visRow;
-        sheetManager.SetLineTint(reading.sheet, columns ? 1 : 2, line, line, swell);
-    }
+    private void Tint(ReadSheets.Reading reading, float swell) => TintLine(reading, _intent.Columns, swell);
 
     private void FeedReach(ReadSheets.Reading reading)
     {
@@ -121,7 +116,9 @@ public class ProfileTool : Tool
                 out Tooltip tooltip, out DataSource data, out CreateSheet piece)) return;
 
         int line = columns ? reading.visCol : reading.visRow;
-        string name = data.TitleAt(columns, line);
+        string name = columns && data.IsGrouped(true)
+            ? DataSource.GroupLabelAt(data, true, data.GroupOf(true, line))
+            : data.TitleAt(columns, line);
         string title = string.IsNullOrEmpty(name) ? $"{(columns ? "Column" : "Row")} {line + 1}" : name;
 
         // Across a grouped axis the cells hold different metrics, so a row's
@@ -138,11 +135,15 @@ public class ProfileTool : Tool
             title += " · " + DataSource.GroupLabelAt(data, true, group);
         }
 
+        // A column strip raises the whole metric, so its summary covers every year.
+        int stripLo = line, stripHi = line;
+        if (columns) sheetManager.ColumnStripSpan(piece, line, out stripLo, out stripHi);
+
         Tooltip.SelectionStats selection = new Tooltip.SelectionStats
         {
             title = title,
             stats = columns
-                ? SheetStats.Over(data, piece.rowMin, piece.rowMax, line, line)
+                ? SheetStats.Over(data, piece.rowMin, piece.rowMax, stripLo, stripHi)
                 : SheetStats.Over(data, line, line, colLo, colHi)
         };
 
@@ -182,7 +183,10 @@ public class ProfileTool : Tool
 
         DataSource data = Scene.Data;
         int line = columns ? visCol : visRow;
-        Report($"projected {DataSource.LabelAt(data, columns, line)}");
+        string label = columns && data != null && data.IsGrouped(true)
+            ? DataSource.GroupLabelAt(data, true, data.GroupOf(true, line))
+            : DataSource.LabelAt(data, columns, line);
+        Report($"projected {label}");
         return true;
     }
 }

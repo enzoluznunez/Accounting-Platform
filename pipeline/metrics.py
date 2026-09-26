@@ -126,14 +126,19 @@ DEFAULT_METRICS = [
 # so what the app draws when it opens an industry without narrowing it.
 YEARS = [2019, 2020]
 
-SHEET_LIMIT = 30
+# A hundred companies is 3,600 bars and a sheet about ten metres deep. It is the
+# most the renderer is asked to draw at once: every bar is its own object with its
+# own collider, so the ceiling here is a rendering budget rather than a limit on
+# what the database will answer.
+SHEET_LIMIT = 100
 
 # How many companies each industry contributes to the cross-industry sheet.
-# Ranking the whole database by size and taking the top thirty returns
-# twenty-one manufacturers and nothing at all from six industries, which is a
-# leaderboard rather than a comparison; a few from each keeps every industry on
-# the sheet and keeps filtering to an industry from coming back empty.
-SHEET_PER = 3
+# Ranking the whole database by size and taking the top hundred returns mostly
+# manufacturers, which is a leaderboard rather than a comparison; ten from each
+# keeps every industry on the sheet and keeps filtering to an industry from
+# coming back empty. Ten of ten industries is a hundred rows, which is the row
+# ceiling, so the two numbers are meant to be read together.
+SHEET_PER = 10
 LIMIT_MINIMUM = 1
 LIMIT_MAXIMUM = 200
 
@@ -180,6 +185,42 @@ def division_bounds():
 
 
 DIVISION_NAMES = [name for name, _, _ in division_bounds()]
+
+# One color per division, and the app colors a company's bars by the industry it
+# belongs to. Assignment follows DIVISION_NAMES rather than a row's rank, so an
+# industry is the same color on every sheet it appears on and a filter that drops
+# rows never repaints the survivors.
+#
+# Any two of these can end up side by side: rows leave here in company-name order
+# but the user sorts them at will, so no ordering is durable and every pair has to
+# stand on its own. Ten categorical colors cannot all be told apart under that —
+# measured worst pairs are dE 2.9 between Transportation and Agriculture for a
+# deuteranope and 7.1 between Manufacturing and Mining for normal vision (OKLab
+# x100, against gates of 8 and 15). So colour is a fast way to see that two rows
+# differ in kind, not a reliable way to name which kind: every row is labelled
+# with its company, and the assistant names the industries on a piece when asked.
+# A legend is what would fix it.
+# Keyed by name rather than zipped against DIVISION_NAMES by position: inserting
+# a division into DIVISIONS would otherwise shift every colour below it, which is
+# exactly the "same colour on every sheet" promise above failing silently.
+DIVISION_COLORS = {
+    "Agriculture": "#2a78d6",                       # blue
+    "Mining": "#eb6834",                            # orange
+    "Construction": "#12a3b4",                      # teal
+    "Manufacturing": "#e34948",                     # red
+    "Transportation & Public Utilities": "#9b4dca",  # purple
+    "Wholesale Trade": "#1baf7a",                   # aqua
+    "Retail Trade": "#eda100",                      # yellow
+    "Finance, Insurance, Real Estate": "#4a3aa7",   # violet
+    "Services": "#008300",                          # green
+    "Public Administration": "#e87ba4",             # magenta
+}
+
+# What a division outside DIVISION_NAMES is drawn in. The ten above are every
+# division division_bounds() can return, so reaching this means the database
+# holds a name this file does not know — a sheet drawn in neutral grey says so
+# and stays readable, where a lookup that raised would cost the whole request.
+UNKNOWN_DIVISION_COLOR = "#8a8a8a"
 
 
 def slug(division_name):

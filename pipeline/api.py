@@ -1,15 +1,12 @@
-from contextlib import asynccontextmanager
 from enum import StrEnum
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
-import psycopg
-from psycopg.rows import dict_row
-from psycopg_pool import ConnectionPool
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+import database
 import sheetcsv
 from metrics import (
     CATEGORIES,
@@ -23,13 +20,10 @@ from metrics import (
     SHEET_PER,
     SIZE_METRIC,
     UNIT_NOTE,
-    division_bounds,
     UNITS,
     YEARS,
     category_of,
 )
-
-DSN = "dbname=nasba"
 
 # The metric surface. A request can name these columns and nothing else, so the
 # descriptive columns on companies stay unreachable as sheet data no matter how
@@ -43,9 +37,9 @@ FieldName = StrEnum("FieldName", {name: name for name in FUNDAMENTALS})
 
 Operator = StrEnum("Operator", {op: op for op in ("eq", "ne", "lt", "lte", "gt", "gte")})
 
-# An industry means one thing in this system: a division. It is what the
-# financials partitions are cut by, what /industries lists, and what the app
-# lists as a dataset. A SIC code still names a narrower slice within
+# An industry means one thing in this system: a division. It is what every
+# company document carries, what /industries lists, and what the app lists as
+# a dataset. A SIC code still names a narrower slice within
 # one, and /sheet takes either.
 DivisionName = StrEnum("DivisionName", {name: name for name in DIVISION_NAMES})
 
@@ -54,9 +48,7 @@ DivisionName = StrEnum("DivisionName", {name: name for name in DIVISION_NAMES})
 # for "the liquidity ratios" without spelling out which three those are.
 CategoryName = StrEnum("CategoryName", {name: name for name in CATEGORIES})
 
-BOUNDS = {name: (lower, upper) for name, lower, upper in division_bounds()}
-
-SQL_OPERATORS = {"eq": "=", "ne": "<>", "lt": "<", "lte": "<=", "gt": ">", "gte": ">="}
+COMPARISONS = {op: f"${op}" for op in ("eq", "ne", "lt", "lte", "gt", "gte")}
 
 
 class Predicate(BaseModel):
@@ -79,9 +71,9 @@ class Predicate(BaseModel):
             raise ValueError(
                 f"{field!r} is not a field this database can filter on; ListFields has the names"
             )
-        if op not in SQL_OPERATORS:
+        if op not in COMPARISONS:
             raise ValueError(
-                f"{op!r} is not a comparison; use one of {', '.join(SQL_OPERATORS)}"
+                f"{op!r} is not a comparison; use one of {', '.join(COMPARISONS)}"
             )
         try:
             number = float(value)
@@ -89,27 +81,7 @@ class Predicate(BaseModel):
             raise ValueError(f"{value!r} is not a number, so {field} cannot be compared to it") from None
         return cls(field=field, op=op, value=number)
 
-pool = ConnectionPool(DSN, min_size=1, max_size=8, kwargs={"row_factory": dict_row}, open=False)
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    pool.open()
-    pool.wait()
-    yield
-    pool.close()
-
-
-app = FastAPI(title="NASBA Financial Ratios", lifespan=lifespan)
-
-
-def connect():
-    """A pooled connection while the service is running, a plain one otherwise,
-    so calling sheet_csv from a script or a test does not require standing the
-    service up first."""
-    if pool.closed:
-        return psycopg.connect(DSN, row_factory=dict_row)
-    return pool.connection()
+app = FastAPI(title="NASBA Financial Ratios")
 
 
 # What to say when a parameter's value is not one of the names it enumerates.
@@ -184,7 +156,7 @@ class SheetQuery(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    # Which rows. A division is one partition and a SIC code a narrower slice
+    # Which rows. A division is one industry and a SIC code a narrower slice
     # inside one; naming neither gives the cross-industry sheet, which is the
     # view the app opens with. At most one of them, so a sheet is never
     # ambiguous about what it holds.
@@ -268,23 +240,16 @@ class SheetQuery(BaseModel):
             return f"SIC {self.sic}"
         return self.division.value if self.division is not None else "any industry"
 
-    def scope(self, alias):
-        """The partition-key predicate and its parameters. Written against the
-        partitioned table itself, which is what lets the planner prune before it
-        reads anything."""
-        if self.everywhere:
-            return "TRUE", []
+    @property
+    def scope(self):
+        """Which company documents the sheet is drawn from, as a MongoDB filter.
+        Division and sic_code are both indexed, so either narrows before
+        anything else is read."""
         if self.sic is not None:
-            return f"{alias}.sic_code = %s", [self.sic]
-        lower, upper = BOUNDS[self.division.value]
-        clauses, params = [], []
-        if lower is not None:
-            clauses.append(f"{alias}.sic_code >= %s")
-            params.append(lower)
-        if upper is not None:
-            clauses.append(f"{alias}.sic_code < %s")
-            params.append(upper)
-        return " AND ".join(clauses), params
+            return {"sic_code": self.sic}
+        if self.division is not None:
+            return {"division": self.division.value}
+        return {}
 
     @field_validator("where")
     @classmethod
@@ -302,9 +267,11 @@ class SheetQuery(BaseModel):
 
 @app.get("/health", response_model=Health)
 def health():
-    with connect() as conn:
-        row = conn.execute("SELECT count(*) AS n FROM financials").fetchone()
-    return {"status": "ok", "financial_rows": row["n"]}
+    # One financial row per company-year, as the Postgres table counted them.
+    counted = list(database.companies().aggregate([
+        {"$group": {"_id": None, "n": {"$sum": {"$size": "$years"}}}},
+    ]))
+    return {"status": "ok", "financial_rows": counted[0]["n"] if counted else 0}
 
 
 @app.get("/ratios", response_model=RatioCatalog)
@@ -317,10 +284,16 @@ def list_fields():
     """What /sheet's 'where' can name. These are the reported figures the ratios
     were computed from: a request can filter on them, and a sheet never plots
     them."""
-    # Field names come from FUNDAMENTALS, so interpolating them is safe.
-    aggregates = ", ".join(f"min({n}) AS lo_{n}, max({n}) AS hi_{n}" for n in FUNDAMENTALS)
-    with connect() as conn:
-        seen = conn.execute(f"SELECT {aggregates} FROM fundamentals").fetchone()
+    # $min and $max pass over a figure that was never reported, as SQL's did.
+    ranges = {}
+    for n in FUNDAMENTALS:
+        ranges[f"lo_{n}"] = {"$min": f"$years.fundamentals.{n}"}
+        ranges[f"hi_{n}"] = {"$max": f"$years.fundamentals.{n}"}
+    found = list(database.companies().aggregate([
+        {"$unwind": "$years"},
+        {"$group": {"_id": None, **ranges}},
+    ]))
+    seen = found[0] if found else {key: None for key in ranges}
 
     return {
         "fields": [
@@ -332,7 +305,7 @@ def list_fields():
             }
             for name in FUNDAMENTALS
         ],
-        "operators": list(SQL_OPERATORS),
+        "operators": list(COMPARISONS),
         "note": UNIT_NOTE,
         "example": "revenues:gt:1000",
     }
@@ -342,109 +315,79 @@ def list_fields():
 def industries(minimum: Annotated[int, Query(ge=1)] = 1):
     """The industries the database holds, one row per division. There are ten,
     the same ten the app lists as datasets and the same ten the financials table
-    is partitioned by, so a name means one thing everywhere. This is the request
+    every company is labelled with, so a name means one thing everywhere. This is the request
     the app makes at startup to know what it can open."""
-    sql = """
-        SELECT i.division, count(*) AS companies, count(DISTINCT c.sic_code) AS sic_codes
-        FROM companies c
-        JOIN industries i USING (sic_code)
-        GROUP BY i.division
-        HAVING count(*) >= %s
-        ORDER BY companies DESC, i.division
-    """
-    with connect() as conn:
-        rows = conn.execute(sql, (minimum,)).fetchall()
-    return {"industries": rows}
+    rows = database.companies().aggregate([
+        {"$group": {"_id": "$division", "companies": {"$sum": 1}, "codes": {"$addToSet": "$sic_code"}}},
+        {"$match": {"companies": {"$gte": minimum}}},
+        {"$sort": {"companies": -1, "_id": 1}},
+        {"$project": {"_id": 0, "division": "$_id", "companies": 1, "sic_codes": {"$size": "$codes"}}},
+    ])
+    return {"industries": list(rows)}
 
 
-def sheet_sql(query):
-    """The /sheet query and its parameters. Separate from the endpoint so a test
-    can EXPLAIN the statement the app actually runs rather than one that looks
-    like it."""
-    # Every metric name is a MetricName and every filter field a FieldName, so
-    # both come from an enumerated list and are safe to interpolate. Only the
-    # values compared against are parameters, and only they were ever free text.
-    columns = ", ".join(f"f.{metric}" for metric in query.columns)
+def sheet_pipeline(query):
+    """The /sheet aggregation. Separate from the endpoint so a test can explain
+    the pipeline the app actually runs rather than one that looks like it.
 
-    # The scope predicate goes on the partitioned table itself rather than on
-    # companies through the join. That is what lets the planner prune to one
-    # division at plan time instead of reading all ten and discarding nine.
-    ranked_scope, ranked_params = query.scope("f")
-    final_scope, final_params = query.scope("f")
+    Every field named below comes from RATIOS or FUNDAMENTALS by way of an
+    enum, so nothing a caller typed becomes a field path; only the values
+    compared against are free text, and they arrive as numbers."""
+    size = f"$years.ratios.{SIZE_METRIC}"
+    stages = [
+        {"$match": query.scope},
+        # Only the requested years; a company with none of them has nothing to
+        # draw and does not reach the sheet.
+        {"$set": {"years": {"$filter": {"input": "$years", "as": "y",
+                                        "cond": {"$in": ["$$y.year", query.years]}}}}},
+        {"$match": {"years.0": {"$exists": True}}},
+        # $max passes over an unreported figure, and is null when every year is
+        # unreported; a descending sort puts null last, as NULLS LAST did.
+        {"$set": {"size": {"$max": size}}},
+    ]
 
     if query.everywhere:
-        # No industry named, so every partition is read and the ranking is done
-        # within each industry rather than across all of them: a few from each
-        # keeps every industry on the sheet. Naming an industry afterwards is
-        # what prunes.
-        ranking = f"""
-        WITH ranked AS (
-            SELECT ticker, size FROM (
-                SELECT f.ticker, max(f.{SIZE_METRIC}) AS size,
-                       row_number() OVER (PARTITION BY i.division
-                                          ORDER BY max(f.{SIZE_METRIC}) DESC NULLS LAST, f.ticker) AS place
-                FROM financials f
-                JOIN industries i ON i.sic_code = f.sic_code
-                WHERE f.year = ANY(%s)
-                GROUP BY f.ticker, i.division
-            ) placed
-            WHERE place <= %s
-        )"""
-        ranking_params = [query.years, query.per]
-    else:
-        ranking = f"""
-        WITH ranked AS (
-            SELECT f.ticker, max(f.{SIZE_METRIC}) AS size
-            FROM financials f
-            WHERE {ranked_scope} AND f.year = ANY(%s)
-            GROUP BY f.ticker
-        )"""
-        ranking_params = [*ranked_params, query.years]
+        # No industry named, so the ranking is done within each industry rather
+        # than across all of them: a few from each keeps every industry on the
+        # sheet. Taken before any filter, so a filter narrows those few.
+        # $topN rather than a window: a window numbers rows by one sort key, and
+        # ties on size have to fall to the ticker, as they did in Postgres.
+        stages += [
+            {"$group": {"_id": "$division",
+                        "top": {"$topN": {"n": query.per, "sortBy": {"size": -1, "_id": 1},
+                                          "output": "$$ROOT"}}}},
+            {"$unwind": "$top"},
+            {"$replaceWith": "$top"},
+        ]
 
-    narrowing, narrow_params = "", []
     predicates = query.predicates
     if predicates:
-        matched_scope, matched_params = query.scope("u")
-        clauses = " AND ".join(
-            f"u.{p.field.value} {SQL_OPERATORS[p.op.value]} %s" for p in predicates
-        )
-        # A company qualifies on the years it actually satisfies the filters in;
-        # 'all' demands one such row per requested year. A NULL line item never
-        # satisfies a comparison, so a company missing the figure is excluded
-        # rather than assumed either way.
-        having = "HAVING count(*) = %s" if query.match == "all" else ""
-        narrowing = f"""
-        , matched AS (
-            SELECT u.ticker
-            FROM fundamentals u
-            WHERE {matched_scope} AND u.year = ANY(%s) AND {clauses}
-            GROUP BY u.ticker
-            {having}
-        )"""
-        narrow_params = [*matched_params, query.years, *(p.value for p in predicates)]
-        if query.match == "all":
-            narrow_params.append(len(query.years))
+        # A company qualifies on the years it actually satisfies every filter in;
+        # 'all' demands that of each requested year. An unreported figure is not
+        # a number, and a comparison it takes part in never holds — MongoDB
+        # would otherwise rank a missing figure below every number and let it
+        # pass 'lt'.
+        holds = {"$and": [
+            clause
+            for p in predicates
+            for figure in [f"$$y.fundamentals.{p.field.value}"]
+            for clause in ({"$isNumber": figure}, {COMPARISONS[p.op.value]: [figure, p.value]})
+        ]}
+        satisfied = {"$size": {"$filter": {"input": "$years", "as": "y", "cond": holds}}}
+        needed = len(query.years) if query.match == "all" else 1
+        stages.append({"$match": {"$expr": {"$gte": [satisfied, needed]}}})
 
-    gate = "JOIN matched USING (ticker)" if predicates else ""
-
-    sql = f"""
-        {ranking}{narrowing}
-        , top AS (
-            SELECT ranked.ticker, ranked.size
-            FROM ranked {gate}
-            ORDER BY ranked.size DESC NULLS LAST, ranked.ticker
-            LIMIT %s
-        )
-        SELECT c.ticker, c.name, f.year, {columns}
-        FROM top
-        JOIN financials f USING (ticker)
-        JOIN companies c USING (ticker)
-        WHERE {final_scope} AND f.year = ANY(%s)
-        ORDER BY top.size DESC NULLS LAST, f.ticker, f.year
-    """
-
-    params = [*ranking_params, *narrow_params, query.limit, *final_params, query.years]
-    return sql, params
+    stages += [
+        # Which companies reach the sheet is a question of size; what order they
+        # stand in on it is not. The cut is taken by size, and the rows leave
+        # in ticker order, which is what they are labelled with.
+        {"$sort": {"size": -1, "_id": 1}},
+        {"$limit": query.limit},
+        {"$sort": {"_id": 1}},
+        {"$project": {"division": 1, "years.year": 1,
+                      **{f"years.ratios.{metric}": 1 for metric in query.columns}}},
+    ]
+    return stages
 
 
 class EmptySheet(Exception):
@@ -456,21 +399,20 @@ def sheet_csv(query):
     """One industry, or every industry, as the CSV the app parses. Every sheet
     the app draws comes through here, so the rows it shows are the database as
     it stands rather than an export of how it once stood."""
-    sql, params = sheet_sql(query)
-    with connect() as conn:
-        rows = conn.execute(sql, params).fetchall()
-
-    if not rows:
+    found = list(database.companies().aggregate(sheet_pipeline(query)))
+    if not found:
         raise EmptySheet(describe_empty(query))
 
-    # Keyed by ticker, not name: seven companies in this data share one name, and
-    # keying on it would let one silently overwrite another.
-    by_ticker = {}
-    for row in rows:
-        company = by_ticker.setdefault(row["ticker"], {"name": row["name"], "years": {}})
-        company["years"][row["year"]] = row
-
-    return sheetcsv.render(by_ticker.values(), query.columns, query.years)
+    # Labelled by ticker: a ticker is a handful of characters where a name runs
+    # to twenty-seven, so every label fits beside its row on the sheet instead
+    # of running into its neighbours. It is unique too, where seven companies
+    # in this data share one name.
+    companies = (
+        {"name": doc["_id"], "industry": doc["division"],
+         "years": {entry["year"]: entry.get("ratios", {}) for entry in doc["years"]}}
+        for doc in found
+    )
+    return sheetcsv.render(companies, query.columns, query.years)
 
 
 def describe_empty(query):

@@ -2,6 +2,11 @@
 
 Turns the raw financial export into the sheets the app draws, and serves them.
 
+Postgres cleans and computes; MongoDB Atlas holds what the API serves. The
+connection string lives in `pipeline/.env`, which git ignores — copy
+`.env.example` to `.env` and fill it in (the Atlas admin user, since loading
+writes).
+
 ## Build order
 
 No data files. The export lives in Postgres as `raw`, verbatim and undiscarded,
@@ -12,10 +17,13 @@ python clean.py                    # raw -> staging          (in SQL)
 psql -d nasba -f schema.sql        # builds the tables
 python ratios.py                   # staging -> industries, companies,
                                    #            financials, fundamentals
+python load_mongo.py               # those four tables -> Atlas, one
+                                   #   document per company
 ```
 
 `clean.py` owns what "usable" means, `schema.sql` owns the model, `ratios.py`
-computes and loads. Nothing round-trips through a file at any point.
+computes, `load_mongo.py` publishes. Nothing round-trips through a file at any
+point.
 
 ### Seeding raw
 
@@ -38,7 +46,8 @@ answers why a company is missing from a sheet.
 
 ## Serving the app
 
-The app ships no data. It asks `/industries` at startup for what exists, and
+The API reads MongoDB only; Postgres need not be running to serve. The app
+ships no data. It asks `/industries` at startup for what exists, and
 draws each sheet from `/sheet`, so every row it shows is the database as it
 stands rather than an export of how it once stood:
 
@@ -66,10 +75,15 @@ python codegen.py --check      # Assets/Source/Gemini/Tools/FinancialsContract.g
 pytest
 ```
 
-Needs a `nasba` database built by the steps above. Every fixture reads a table:
-`staging` for the export as loaded, `financials` and `fundamentals` for what was
-computed from it. The formula tests check `financials` against arithmetic done
-by hand on `staging`, so they still verify the computation rather than the load.
+Needs both halves built by the steps above: `staging` in Postgres for the
+export as loaded, and the Atlas collection for what was computed from it. The
+formula tests check what reached Atlas against arithmetic done by hand on
+`staging`, so they verify the computation and the load together. The API
+tests seed a company or two and delete them again.
+
+Changing the database under the API is checked with `parity.py`: record the
+answers before the change, check them after, and every one must match byte for
+byte. The snapshot holds real data, so keep it outside the repository.
 
 ## The one list
 

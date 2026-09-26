@@ -39,45 +39,11 @@ public static partial class Gemini {
     private static void RefreshSystemInstruction() {
         if (config == null || promptBody == null) return;
 
-        string instruction = ComposeSystemInstruction(promptBody, promptTail);
+        string instruction = promptBody + promptTail;
         lastInstructionChars = instruction.Length;
         config.SystemInstruction = new Content {
             Parts = new List<Part> { new Part { Text = instruction } }
         };
-    }
-
-    private static async Task DoRefresh() {
-        refreshing = true;
-        try {
-            bool seeded = false;
-            if (MemoryConfig.MemoryLayerEnabled) {
-                await FinalizeForRefresh().ConfigureAwait(false);
-                seeded = !string.IsNullOrEmpty(EpisodicMemory.Summary);
-            }
-            Debug.Log($"[Gemini][window] refreshing session at {contextTokens} context tokens (raw prompt {lastPromptTokens}, summarySeeded={seeded})");
-            RefreshSession();
-            int waited = 0;
-            while (_status != GeminiStatus.Live && waited < 15000) {
-                await Task.Delay(50).ConfigureAwait(false);
-                waited += 50;
-            }
-        }
-        catch (Exception e) {
-            Debug.LogWarning($"[Gemini] session refresh failed: {e.Message}");
-        }
-        finally {
-            refreshing = false;
-        }
-    }
-
-    private static void RefreshSession() {
-        resumeHandle = null;
-        RetireConnection();
-        _status = GeminiStatus.Reconnecting;
-        setupCompleted = false;
-        while (sendQueue.TryDequeue(out _)) { }
-        var s = liveSession;
-        if (s != null) { try { _ = s.CloseAsync(); } catch { } }
     }
 
     private static async Task RunSessionAsync(int gen, CancellationToken token) {
@@ -97,7 +63,7 @@ public static partial class Gemini {
                 Interlocked.Exchange(ref toolRoundsThisTurn, 0);
                 ResetTranscripts();
                 ClearPendingCalls();
-                Debug.Log($"[Gemini][diag] connecting: model={ModelId}, tools={config.Tools?.Sum(t => t.FunctionDeclarations?.Count ?? 0)}, promptChars={lastInstructionChars}, resume={resumeHandle != null}, compTrigger={CompactTrigger}, compTarget={CompactTarget}, serverTrim={SafetyNetTrigger}/{SafetyNetTarget}");
+                Debug.Log($"[Gemini][diag] connecting: model={ModelId}, tools={config.Tools?.Sum(t => t.FunctionDeclarations?.Count ?? 0)}, promptChars={lastInstructionChars}, resume={resumeHandle != null}, serverTrim={SafetyNetTrigger}/{SafetyNetTarget}");
                 s = await client.Live.ConnectAsync(model: ModelId, config: config).ConfigureAwait(false);
                 if (!Current(gen)) break;
                 _status = GeminiStatus.Live;

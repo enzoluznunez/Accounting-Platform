@@ -17,14 +17,10 @@ public class GeminiClient : MonoBehaviour {
     [Tooltip("When a session handshake is opened. OnIntent connects when the tool panel opens; OnFirstUse waits until the assistant is switched on.")]
     public ConnectPolicy connectPolicy = ConnectPolicy.OnIntent;
 
-    private const float IntentLingerSeconds = 8f;
-    private const float ResumeGraceSeconds = 2f;
-
     private bool _ready;
     private bool _active;
     private bool _intentHeld;
     private int _connectQueuedFrame = -1;
-    private float _intentEndAt = -1f;
     private GeminiStatus _lastStatus = GeminiStatus.Off;
 
     public bool Ready => _ready;
@@ -61,19 +57,9 @@ public class GeminiClient : MonoBehaviour {
 
     private void QueueConnect() => _connectQueuedFrame = Time.frameCount;
 
-    private void OnApplicationFocus(bool focused) {
-        if (focused) DeferLinger();
-    }
-
-    private void DeferLinger() {
-        if (_intentEndAt >= 0f)
-            _intentEndAt = Mathf.Max(_intentEndAt, Time.unscaledTime + ResumeGraceSeconds);
-    }
-
     public void SetActive(bool active) {
         bool changed = _active != active;
         _active = active;
-        _intentEndAt = -1f;
 
         if (_ready) {
             Gemini.SetKeepAlive(active);
@@ -89,20 +75,8 @@ public class GeminiClient : MonoBehaviour {
         if (changed) ActiveChanged?.Invoke(active);
     }
 
-    public void BeginRun(int compTrigger, int compTarget) {
-        if (!_ready) return;
-        Gemini.BeginRun(compTrigger, compTarget);
-        bool changed = !_active;
-        _active = true;
-        Gemini.SetKeepAlive(true);
-        Gemini.Connect();
-        Gemini.Listen();
-        if (changed) ActiveChanged?.Invoke(true);
-    }
-
     public void NotifyIntent() {
         _intentHeld = true;
-        _intentEndAt = -1f;
         if (!_ready || _active) return;
         if (connectPolicy == ConnectPolicy.OnFirstUse) return;
         if (!CanWarm) return;
@@ -114,7 +88,9 @@ public class GeminiClient : MonoBehaviour {
         _intentHeld = false;
         if (!_ready || _active) return;
         _connectQueuedFrame = -1;
-        _intentEndAt = Time.unscaledTime + IntentLingerSeconds;
+        if (Gemini.Status != GeminiStatus.Off)
+            Debug.Log("[Gemini][session] tool panel closed; dropping the intent socket");
+        Gemini.Disconnect();
     }
 
     void Update() {
@@ -123,17 +99,6 @@ public class GeminiClient : MonoBehaviour {
         if (_connectQueuedFrame >= 0 && Time.frameCount > _connectQueuedFrame) {
             _connectQueuedFrame = -1;
             if (CanWarm) _ = ConnectNow("queued");
-        }
-
-        if (_intentEndAt >= 0f && Time.unscaledTime >= _intentEndAt) {
-            _intentEndAt = -1f;
-            if (!_active) {
-                bool warm = Gemini.Status != GeminiStatus.Off;
-                Debug.Log(warm
-                    ? $"[Gemini][session] intent socket idle for {IntentLingerSeconds}s; dropping it"
-                    : "[Gemini][session] intent window expired; assistant was already off");
-                Gemini.Disconnect();
-            }
         }
 
         var status = Gemini.Status;
@@ -163,8 +128,6 @@ public class GeminiClient : MonoBehaviour {
             Gemini.Disconnect();
             return;
         }
-
-        DeferLinger();
 
         if (_active) {
             _ = ConnectNow("resume");

@@ -66,7 +66,8 @@ def render(document):
     out = [HEADER]
     out.append(f'    public const int LimitMinimum = {limit["minimum"]};\n')
     out.append(f'    public const int LimitMaximum = {limit["maximum"]};\n')
-    out.append(f'    public const int LimitDefault = {limit["default"]};\n\n')
+    out.append(f'    public const int LimitDefault = {limit["default"]};\n')
+    out.append(f'    public const int PerDefault = {sheet["per"]["default"]};\n\n')
     out.append(csharp_array("Metrics", schemas["MetricName"]["enum"]))
     out.append(csharp_array("DefaultMetrics", sheet["metrics"]["default"]))
     out.append(f'\n    public static readonly int[] Years = {{ {", ".join(str(y) for y in sheet["years"]["default"])} }};\n')

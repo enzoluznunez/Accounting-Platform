@@ -67,9 +67,7 @@ public static class Style
     public const float PanelInset = MediumPadding;
 
     public const float ScrollSensitivity = 24f;
-    public const float CellRowHeight = 28f;
     public const float HeaderHeight = 30f;
-    public const float TitleColumn = 120f;
     public const float ValueColumn = 90f;
 
     public const float OutRadius = 8f;
@@ -81,18 +79,30 @@ public static class Style
 
     public static float InnerRadius(float radius) => radius - SmallBorder;
 
+    // A tile is a button the size of a card, and a fixed corner would read as a
+    // square beside the buttons it shares a panel with. Its radius is a share of
+    // its side instead, held between a button's corner and the panel's own so
+    // the whole surface stays one family. Whole units keep the rounded sprites
+    // to a handful as a tile is resized.
+    public const float TileRadiusRatio = 0.12f;
+
+    public static float TileRadius(float side) =>
+        Mathf.Round(Mathf.Clamp(side * TileRadiusRatio, OutRadius, PanelRadius + SmallPadding));
+
     public static readonly Vector2 Subbutton = new Vector2(40f, 20f);
     public static readonly Vector2 Button = new Vector2(50f, 25f);
-    public static readonly Vector2 WatchButton = new Vector2(90f, 45f);
+    // The watch carries one button, drawn as a circle: a square tile with a
+    // corner radius of half its side.
+    public const float WatchButtonDiameter = 64f;
+    public static readonly Vector2 WatchButton = new Vector2(WatchButtonDiameter, WatchButtonDiameter);
     public const float TitleBarButtonWidth = 80f;
 
     public const int SortPanels = 0;
     public const int SortHandUI = 0;
     public const int SortNotices = 10;
 
-    public static readonly Vector2 Subpanel = new Vector2(400f, 200f);
+    public static readonly Vector2 Subpanel = new Vector2(400f, 280f);
     public static readonly Vector2 Panel = new Vector2(400f, 400f);
-    public static readonly Vector2 DataPanel = new Vector2(Panel.x, Subpanel.y * 1.5f);
     public const float TooltipWidth = 360f;
 
     public static Color Alpha(Color c, float a)

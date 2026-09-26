@@ -18,7 +18,7 @@ public abstract class AgenticTool : Function {
     protected abstract void Run(Dictionary<string, object> args, Dictionary<string, object> result);
 
     private static readonly string[] RefusalKeys =
-        { "error", "preconditionUnmet", "needsSheet", "needsChoice" };
+        { "error", "preconditionUnmet", "needsChoice" };
 
     protected static bool IsRefusal(Dictionary<string, object> result) {
         for (int i = 0; i < RefusalKeys.Length; i++)
@@ -93,44 +93,24 @@ public abstract class AgenticTool : Function {
 
     protected static Schema ParametersFor(System.Type args) => ToolArguments.Schema(args);
 
-    protected static bool TryResolveTargetBounds(int? sheet, Dictionary<string, object> result,
-        out int rowMin, out int rowMax, out int colMin, out int colMax, out int pieceId) {
+    // There is one sheet, so there is nothing to pick: the bounds are its bounds.
+    // The one answer to "which sheet do tools act on". Both helpers below go
+    // through it, so a span and a piece cannot come back disagreeing. IsBuilt is
+    // _sheets.Count > 0 and Sheet is _sheets[0] or null, so this null test is
+    // the same question both of them used to ask separately.
+    private static CreateSheet ResolvedSheet() {
+        ManageSheets mgr = Scene.Sheets;
+        return mgr != null ? mgr.Sheet : null;
+    }
+
+    protected static bool TryResolveTargetBounds(Dictionary<string, object> result,
+        out int rowMin, out int rowMax, out int colMin, out int colMax) {
         rowMin = rowMax = colMin = colMax = 0;
-        pieceId = 0;
 
-        var mgr = Scene.Sheets;
-        if (mgr == null || !mgr.IsBuilt) { result["error"] = "No sheet in scene."; return false; }
-        if (!mgr.IsPresented) {
-            Refuse(result, "visible sheet",
-                "The sheet is hidden because the dataset is collapsed. Reopen it with SetDataset, then call this again.");
-            return false;
-        }
+        CreateSheet sheet = ResolvedSheet();
+        if (sheet == null) { result["error"] = "No sheet in scene."; return false; }
 
-        var list = mgr.Sheets;
-        CreateSheet piece;
-
-        if (sheet.HasValue) {
-            pieceId = sheet.Value;
-            piece = mgr.SheetById(pieceId);
-            if (piece == null) { result["error"] = $"There is no sheet piece #{pieceId}."; return false; }
-        }
-        else if (list.Count == 1) { piece = list[0]; pieceId = piece.sheetId; }
-        else {
-            result["needsSheet"] = true;
-            result["message"] = "The sheet is sliced into several pieces; ask the user which one.";
-            var pieces = new List<object>();
-            for (int i = 0; i < list.Count; i++) {
-                var s = list[i];
-                pieces.Add(new Dictionary<string, object> {
-                    { "id", s.sheetId },
-                    { "cellCount", s.RowCount * s.ColCount }
-                });
-            }
-            result["sheets"] = pieces;
-            return false;
-        }
-
-        rowMin = piece.rowMin; rowMax = piece.rowMax; colMin = piece.colMin; colMax = piece.colMax;
+        rowMin = sheet.rowMin; rowMax = sheet.rowMax; colMin = sheet.colMin; colMax = sheet.colMax;
         return true;
     }
 
@@ -216,16 +196,6 @@ public abstract class AgenticTool : Function {
         hi = Math.Min(block * size + size - 1, max);
     }
 
-    // Every line the given blocks cover, clipped to the piece.
-    protected static List<int> ExpandBlocks(bool columns, IReadOnlyList<int> blocks, int min, int max) {
-        var lines = new List<int>(blocks.Count);
-        for (int i = 0; i < blocks.Count; i++) {
-            BlockSpan(columns, blocks[i], min, max, out int lo, out int hi);
-            for (int v = lo; v <= hi; v++) lines.Add(v);
-        }
-        return lines;
-    }
-
     protected static int BlockCountIn(bool columns, int min, int max) {
         var data = Scene.Data;
         int size = data != null ? data.GroupSize(columns) : 1;
@@ -256,19 +226,6 @@ public abstract class AgenticTool : Function {
         result["error"] = $"'{token}' is not one of this sheet's columns; it has {string.Join(" and ", names)}.";
         result["series"] = new List<object>(names);
         return false;
-    }
-
-    protected static bool TryResolveScope(string[] names, bool columns, int min, int max,
-        Dictionary<string, object> result, out List<int> lines) {
-
-        if (names == null || names.Length == 0) {
-            var data = Scene.Data;
-            int size = data != null ? data.GroupSize(columns) : 1;
-            lines = new List<int>(BlockCountIn(columns, min, max));
-            for (int b = min / size; b <= max / size; b++) lines.Add(b);
-            return true;
-        }
-        return TryResolveLines(names, columns, min, max, result, out lines);
     }
 
     protected static bool TryResolveLines(IReadOnlyList<string> tokens, bool columns, int min, int max,
@@ -315,24 +272,6 @@ public abstract class AgenticTool : Function {
         return true;
     }
 
-    protected static string MissingPiece(int id) =>
-        $"There is no sheet piece #{id} on the open dataset; call ListDatasets for current ids.";
-
-    protected static bool TryResolvePieces(ManageSheets mgr, int[] ids,
-        Dictionary<string, object> result, out List<CreateSheet> pieces) {
-        pieces = null;
-        var seen = new HashSet<int>();
-        var found = new List<CreateSheet>(ids.Length);
-        foreach (int id in ids) {
-            if (!seen.Add(id)) { result["error"] = $"Piece #{id} is listed more than once."; return false; }
-            CreateSheet piece = mgr.SheetById(id);
-            if (piece == null) { result["error"] = MissingPiece(id); return false; }
-            found.Add(piece);
-        }
-        pieces = found;
-        return true;
-    }
-
     protected static bool RunGrouped(int count, Func<int, bool> act) {
         var edits = ManageDatasets.ActiveEdits;
         if (count > 1) edits.OpenGroup();
@@ -341,41 +280,6 @@ public abstract class AgenticTool : Function {
                 if (!act(i)) return false;
         }
         finally { edits.CloseGroup(); }
-        return true;
-    }
-
-    protected static bool ForEachPiece(int[] ids, Dictionary<string, object> result, string verb,
-        Func<CreateSheet, Dictionary<string, object>, bool> act) {
-        var mgr = Scene.Sheets;
-        if (mgr == null || !mgr.IsBuilt) { result["error"] = $"The sheet is not ready to {verb}."; return false; }
-
-        if (!TryResolvePieces(mgr, ids, result, out List<CreateSheet> pieces)) return false;
-
-        var done = new List<object>();
-        bool ok = RunGrouped(pieces.Count, i => {
-            CreateSheet piece = pieces[i];
-            var step = new Dictionary<string, object>();
-            if (!act(piece, step)) {
-                bool prompted = step.Count > 0 && !step.ContainsKey("error");
-                if (prompted) {
-                    foreach (var entry in step) result[entry.Key] = entry.Value;
-                    if (done.Count > 0)
-                        result["note"] = $"Handled {done.Count} piece(s) before this was needed.";
-                }
-                else {
-                    result["error"] = done.Count == 0
-                        ? (step.TryGetValue("error", out var e) ? e.ToString() : $"Could not {verb} piece #{piece.sheetId}.")
-                        : $"Handled {done.Count} piece(s), then #{piece.sheetId} failed.";
-                }
-                if (done.Count > 0) result["sheets"] = done;
-                return false;
-            }
-            done.Add(piece.sheetId);
-            return true;
-        });
-        if (!ok) return false;
-
-        result["sheets"] = done;
         return true;
     }
 
@@ -450,8 +354,6 @@ public abstract class AgenticTool : Function {
         switch (s.Trim().ToLowerInvariant()) {
             case "none": tool = ToolType.None; return true;
             case "filter": tool = ToolType.Filter; return true;
-            case "slice": tool = ToolType.Slice; return true;
-            case "color": case "colour": tool = ToolType.Color; return true;
             case "move": case "grab": tool = ToolType.Move; return true;
             case "rotate": tool = ToolType.Rotate; return true;
             case "scale": tool = ToolType.Scale; return true;
@@ -461,13 +363,6 @@ public abstract class AgenticTool : Function {
         return false;
     }
 
-    protected struct ResolvedTarget {
-        public int visRow;
-        public int visCol;
-        public bool hasRow;
-        public bool hasCol;
-    }
-
     protected readonly struct PiecePose {
         public readonly UnityEngine.Vector3 pos;
         public readonly UnityEngine.Quaternion rot;
@@ -475,15 +370,11 @@ public abstract class AgenticTool : Function {
         public PiecePose(UnityEngine.Transform t) { pos = t.localPosition; rot = t.localRotation; scale = t.localScale; }
     }
 
-    protected static bool TryResolvePiece(int? id, Dictionary<string, object> result,
-        string verb, out ManageSheets mgr, out CreateSheet sheet, out int pieceId) {
+    protected static bool TryResolveSheet(Dictionary<string, object> result,
+        string verb, out ManageSheets mgr, out CreateSheet sheet) {
         mgr = Scene.Sheets;
-        sheet = null;
-        pieceId = 0;
-        if (mgr == null || !mgr.IsBuilt) { result["error"] = $"The sheet is not ready to {verb}; is a sheet shown?"; return false; }
-        if (!TryResolveTargetBounds(id, result, out _, out _, out _, out _, out pieceId)) return false;
-        sheet = mgr.SheetById(pieceId);
-        if (sheet == null) { result["error"] = "Could not resolve that piece."; return false; }
+        sheet = ResolvedSheet();
+        if (sheet == null) { result["error"] = $"The sheet is not ready to {verb}; is a sheet shown?"; return false; }
         return true;
     }
 

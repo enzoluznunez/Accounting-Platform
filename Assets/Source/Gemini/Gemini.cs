@@ -36,7 +36,6 @@ public static partial class Gemini {
     private static volatile bool generationActive;
     private static volatile bool injecting;
     private static volatile bool turnPending;
-    private static volatile bool refreshing;
     private static volatile bool shutdownAfterTurn;
 
     private static CancellationTokenSource sessionCts;
@@ -68,7 +67,7 @@ public static partial class Gemini {
     private const int GoAwayGraceMs = 8000;
     private const int PreviousDrainMs = 5000;
 
-    public static bool Busy => generationActive || turnPending || injecting || refreshing;
+    public static bool Busy => generationActive || turnPending || injecting;
     public static GeminiStatus Status => _status;
     public static int ToolRoundId => Volatile.Read(ref toolRoundId);
 
@@ -216,7 +215,6 @@ public static partial class Gemini {
             var keyTask = loadApiKey();
             var micTask = ensureMicPermission();
             client = new Client(apiKey: await keyTask);
-            EpisodicMemory.Init(client);
             ResetWindow();
 
             RebuildConfig();
@@ -246,14 +244,14 @@ public static partial class Gemini {
     private static void RebuildConfig() {
         var tools = new List<GTool>();
         if (webSearchEnabled) tools.Add(new GTool { GoogleSearch = new GoogleSearch() });
-        tools.Add(new GTool { FunctionDeclarations = ProceduralMemory.ToolDeclarations() });
+        tools.Add(new GTool { FunctionDeclarations = SystemPrompt.ToolDeclarations() });
 
-        promptBody = ProceduralMemory.PromptBody(webSearchEnabled);
-        promptTail = ProceduralMemory.PromptTail();
+        promptBody = SystemPrompt.PromptBody(webSearchEnabled);
+        promptTail = SystemPrompt.PromptTail();
 
         config = new LiveConnectConfig {
             SystemInstruction = new Content {
-                Parts = new List<Part> { new Part { Text = ComposeSystemInstruction(promptBody, promptTail) } }
+                Parts = new List<Part> { new Part { Text = promptBody + promptTail } }
             },
             ContextWindowCompression = new ContextWindowCompressionConfig {
                 TriggerTokens = SafetyNetTrigger,
@@ -283,15 +281,6 @@ public static partial class Gemini {
                 WordTimestamp = true
             }
         };
-    }
-
-    public static void BeginRun(int trigger, int target) {
-        Disconnect();
-        resumeHandle = null;
-        lastInactiveUtc = default;
-        SetBudget(trigger, target);
-        ResetWindow();
-        RebuildConfig();
     }
 
     public static void Destroy() {

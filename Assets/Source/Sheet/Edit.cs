@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum EditKind { Slice, Move, Rotate, Scale, Color, Sort, Filter, Profile }
+public enum EditKind { Move, Rotate, Scale, Sort, Filter, Profile }
 
 public struct MoveRecord
 {
@@ -24,28 +24,10 @@ public struct ProjectionRecord
     public float lift;
 }
 
-public struct ColorCell
-{
-    public int dataRow;
-    public int dataCol;
-    public string prevColorHex;
-}
-
-public struct SliceRecord
-{
-    public int aId, bId;
-    public int pRowMin, pRowMax, pColMin, pColMax;
-    public Vector3 pLocalPos;
-    public SliceAxis axis;
-    public int boundary;
-    public float gap;
-}
-
 public class Edit
 {
     public EditKind kind;
     public int sheetId = -1;
-    public SliceRecord slice;
     public MoveRecord move;
     public ProjectionRecord projection;
 
@@ -63,19 +45,17 @@ public class Edit
     public List<int> filterPreHidden;
     public List<int> filterPostHidden;
 
-    public string colorName;
-    public string colorHex;
-    public List<ColorCell> colorStroke;
+    // Which axis the hidden set belongs to. One edit only ever covers one axis,
+    // so a press on the company list and a press on the metric list undo apart.
+    public bool filterIsRow;
 
     public static string KindName(EditKind kind)
     {
         switch (kind)
         {
-            case EditKind.Slice: return "slice";
             case EditKind.Move: return "move";
             case EditKind.Rotate: return "rotate";
             case EditKind.Scale: return "scale";
-            case EditKind.Color: return "color";
             case EditKind.Sort: return "sort";
             case EditKind.Filter: return "filter";
             case EditKind.Profile: return "profile";
@@ -156,20 +136,8 @@ public class EditList : List<Edit>
         return e;
     }
 
-    public void PushSlice(SliceRecord slice) =>
-        Push(new Edit { kind = EditKind.Slice, sheetId = slice.aId, slice = slice });
-
     public void PushMove(MoveRecord move, EditKind kind) =>
         Push(new Edit { kind = kind, sheetId = move.sheetId, move = move });
-
-    public void PushColorStroke(string colorName, string colorHex, List<ColorCell> cells) =>
-        Push(new Edit
-        {
-            kind = EditKind.Color,
-            colorName = colorName,
-            colorHex = colorHex,
-            colorStroke = cells
-        });
 
     public void PushSort(bool isColumn, IReadOnlyList<int> preOrder, DataSource.SortMode preMode, int from, int target) =>
         Push(new Edit
@@ -198,22 +166,15 @@ public class EditList : List<Edit>
     public void PushProjection(ProjectionRecord projection, EditKind kind) =>
         Push(new Edit { kind = kind, projection = projection });
 
-    public void PushFilter(IReadOnlyList<int> preHidden, IReadOnlyList<int> postHidden) =>
+    public void PushFilter(IReadOnlyList<int> preHidden, IReadOnlyList<int> postHidden, bool isRow) =>
         Push(new Edit
         {
             kind = EditKind.Filter,
             filterPreHidden = preHidden != null ? new List<int>(preHidden) : new List<int>(),
-            filterPostHidden = postHidden != null ? new List<int>(postHidden) : new List<int>()
+            filterPostHidden = postHidden != null ? new List<int>(postHidden) : new List<int>(),
+            filterIsRow = isRow
         });
 
     public void DropKind(EditKind kind) => RemoveAll(e => e.kind == kind);
 
-    // A piece that no longer exists takes its records with it: the cut that made
-    // it, and anything since that moved it.
-    public void DropPiece(int sheetId)
-    {
-        if (RemoveAll(e => e.sheetId == sheetId ||
-                           (e.kind == EditKind.Slice && e.slice.bId == sheetId)) > 0)
-            RaiseChanged();
-    }
 }

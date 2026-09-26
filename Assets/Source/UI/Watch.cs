@@ -13,7 +13,6 @@ public class Watch : MonoBehaviour
     [SerializeField, Interface(typeof(IHand))]
     private UnityEngine.Object _hand;
 
-    public PanelUI dataPanelUI;
     public ToolPanelUI toolPanelUI;
     public GeminiClient geminiClient;
 
@@ -42,12 +41,10 @@ public class Watch : MonoBehaviour
     public event Action<bool, GeminiStatus> AssistantActiveChanged;
 
     private IHand _ihand;
-    private UIButton.Handle _dataBtn;
     private UIButton.Handle _toolBtn;
 
     private Canvas _canvas;
     private Transform _canvasTransform;
-    private bool _dataPanelOpen;
     private bool _toolPanelOpen;
 
     private bool _raisedActive;
@@ -77,7 +74,6 @@ public class Watch : MonoBehaviour
         }
 
         BindButtons();
-        UIButton.SetSelected(_dataBtn, false);
         UIButton.SetSelected(_toolBtn, false);
 
         if (_canvas != null)
@@ -86,9 +82,25 @@ public class Watch : MonoBehaviour
 
     private void BindButtons()
     {
-        _dataBtn = BindPanelButton("Data Panel_Btn", OnDataClicked);
         _toolBtn = BindPanelButton("Tool Panel_Btn", OnToolClicked);
+        HideUnboundButtons();
         SizeToButtons();
+    }
+
+    // The watch shows exactly the buttons it binds. Anything else left in the
+    // group — a button for a panel that no longer exists — is taken off the
+    // layout rather than left sitting there doing nothing.
+    private void HideUnboundButtons()
+    {
+        RectTransform group = FindTransform.FindDeep(transform, "Buttons") as RectTransform;
+        if (group == null) return;
+
+        GameObject bound = _toolBtn != null ? _toolBtn.Root : null;
+        for (int i = 0; i < group.childCount; i++)
+        {
+            GameObject child = group.GetChild(i).gameObject;
+            if (child != bound && child.activeSelf) child.SetActive(false);
+        }
     }
 
     private void SizeToButtons()
@@ -100,12 +112,13 @@ public class Watch : MonoBehaviour
         int margin = (int)Style.SmallPadding;
         vlg.spacing = Style.SmallPadding;
         vlg.padding = new RectOffset(margin, margin, margin, margin);
+        vlg.childAlignment = TextAnchor.MiddleCenter;
 
         int count = 0;
         for (int i = 0; i < group.childCount; i++)
         {
             GameObject child = group.GetChild(i).gameObject;
-            if (child.GetComponent<LayoutElement>() == null) continue;
+            if (!child.activeSelf || child.GetComponent<LayoutElement>() == null) continue;
 
             UILayout.FixedSize(child, Style.WatchButton);
             count++;
@@ -136,15 +149,12 @@ public class Watch : MonoBehaviour
             return null;
         }
 
-        UIButton.Handle h = UIButton.Adopt(t.gameObject);
+        UIButton.Handle h = UIButton.Adopt(t.gameObject,
+            radius: Style.WatchButtonDiameter * 0.5f);
+        if (h.Text != null) h.Text.gameObject.SetActive(false);
         h.Button.onClick.AddListener(onClick);
         UIButton.SetSelected(h, false);
         return h;
-    }
-
-    private void OnDataClicked()
-    {
-        if (dataPanelUI != null) dataPanelUI.TogglePanel();
     }
 
     private void OnToolClicked()
@@ -191,7 +201,6 @@ public class Watch : MonoBehaviour
 
     private void SyncPanelButtonStates()
     {
-        SyncPanelButton(dataPanelUI, _dataBtn, ref _dataPanelOpen);
         SyncPanelButton(toolPanelUI, _toolBtn, ref _toolPanelOpen);
     }
 
@@ -266,8 +275,7 @@ public class Watch : MonoBehaviour
     }
 
     private bool Engaged =>
-        (_dataBtn != null && _dataBtn.Highlight != null && _dataBtn.Highlight.IsEngaged) ||
-        (_toolBtn != null && _toolBtn.Highlight != null && _toolBtn.Highlight.IsEngaged);
+        _toolBtn != null && _toolBtn.Highlight != null && _toolBtn.Highlight.IsEngaged;
 
     private void LateUpdate()
     {

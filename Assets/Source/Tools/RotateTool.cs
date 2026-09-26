@@ -55,7 +55,7 @@ public class RotateTool : Tool
         float distance = sheetManager.transform
             .TransformVector(sheet.transform.localPosition - prePos).magnitude;
 
-        Report($"rotated piece {sheet.sheetId}");
+        Report("rotated the sheet");
 
         ManageDatasets.ActiveEdits.PushMove(new MoveRecord
         {

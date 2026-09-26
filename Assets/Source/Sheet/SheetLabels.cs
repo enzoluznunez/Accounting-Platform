@@ -36,6 +36,14 @@ public class SheetLabels
     private float _colGroupOut;
 
     private const float TickScale = 0.72f;
+
+    // The cell pitch the fixed text scale was chosen against. A label is sized
+    // relative to the column it stands under rather than in metres, so the sheet
+    // can be a tabletop model or a wall and the titles stay the same size
+    // against the bars instead of running into one another at the small end.
+    private const float ReferenceCellSize = 0.1f;
+
+    private float _textScale = 1f;
     private readonly Side _cols = new Side();
     private readonly Side _rows = new Side();
     private Transform _root;
@@ -212,6 +220,7 @@ public class SheetLabels
         _colGroupSize = data != null ? data.ColumnGroupSize : 1;
         if (_colGroupSize <= 1) groupGap = 0f;
         _colGroupOut = cellSize * 0.85f;
+        _textScale = cellSize > 0f ? cellSize / ReferenceCellSize : 1f;
 
         _cols.fade = 1f;
         _cols.flipping = false;
@@ -300,7 +309,7 @@ public class SheetLabels
         Transform t = label.transform;
         t.localPosition = localPosition;
         t.localRotation = facing;
-        t.localScale = Vector3.one * (Style.WorldTextScale * scale);
+        t.localScale = Vector3.one * (Style.WorldTextScale * scale * _textScale);
 
         label.gameObject.SetActive(true);
         return label;

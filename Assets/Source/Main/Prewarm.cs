@@ -72,7 +72,6 @@ public class Prewarm : MonoBehaviour
         GameObject rig = BuildWarmRig();
 
         ToolPanelUI tool = Scene.ToolPanel;
-        PanelUI data = Scene.DataPanel as PanelUI;
         Tooltip tooltip = FindAnyObjectByType<Tooltip>(FindObjectsInactive.Include);
 
         if (tool != null)
@@ -80,7 +79,6 @@ public class Prewarm : MonoBehaviour
             tool.PrewarmCanvas(true);
             tool.PrewarmContent(true);
         }
-        if (data != null) data.PrewarmCanvas(true);
         if (tooltip != null) tooltip.PrewarmCanvas(true);
 
         yield return null;
@@ -90,7 +88,6 @@ public class Prewarm : MonoBehaviour
             tool.PrewarmContent(false);
             tool.PrewarmCanvas(false);
         }
-        if (data != null) data.PrewarmCanvas(false);
         if (tooltip != null) tooltip.PrewarmCanvas(false);
         if (rig != null) Destroy(rig);
 

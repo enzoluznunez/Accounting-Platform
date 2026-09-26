@@ -7,19 +7,18 @@ using Type = Google.GenAI.Types.Type;
 public sealed class SetDataset : AgenticTool<SetDataset.Args> {
 
     public class Args {
-        [Doc("The dataset's name, or its position from the top of the dataset rail where 1 is the newest, " +
-             "or 'none' to collapse the current one. Prefer the name.")]
+        [Doc("The dataset's name, or its position in the list ListDatasets returns where 1 is the newest. " +
+             "Prefer the name.")]
         public string dataset;
     }
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "SetDataset",
-        Description = "Open one of the listed datasets (switch to it), the same as the user tapping it in the " +
-                      "rail; each dataset keeps its own edits and undo history. Most of them are industries the app " +
-                      "ships with, listed from the start and read the first time they are opened, so this is how " +
-                      "you put an industry on screen and it works whether or not the dataset has been read before. " +
-                      "Pass 'none' to deselect: collapse the current dataset, hiding the sheet while keeping it " +
-                      "loaded and switchable.",
+        Description = "Open one of the listed datasets (switch to it); each keeps its own edits and undo " +
+                      "history. They are the industries the database holds, listed from the start and fetched the " +
+                      "first time they are opened, so this is how an industry gets on screen and it works whether " +
+                      "or not that one has been read before. Nothing else in the app changes datasets: there is no " +
+                      "button for it, so a user who wants a different industry is asking you.",
         Parameters = ParametersFor(typeof(Args))
     };
 
@@ -50,15 +49,6 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
 
         string query = args.dataset?.Trim();
 
-        if (string.Equals(query, "none", StringComparison.OrdinalIgnoreCase)) {
-            var dp = Scene.DataPanel;
-            if (dp == null) { result["error"] = "Data panel not found in scene."; return; }
-            if (dp.IsCollapsed) { result["collapsed"] = true; result["note"] = "The dataset was already collapsed."; return; }
-            dp.CollapseData();
-            result["collapsed"] = true;
-            return;
-        }
-
         if (!TryResolveIndex(datasets, query, out int index)) {
             result["error"] = $"No single open dataset matches '{query}'; if several match, ask the user which one.";
             result["available"] = ListLabels(datasets);
@@ -73,9 +63,7 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
 
         bool alreadyActive = index == datasets.ActiveIndex;
 
-        var panel = Scene.DataPanel;
-        if (panel != null) panel.ShowDataset(index);
-        else if (!alreadyActive) datasets.SwitchDataset(index);
+        if (!alreadyActive) datasets.SwitchDataset(index);
 
         result["switched"] = datasets.Datasets[index].label;
         result["fromTop"] = datasets.DatasetCount - index;
@@ -83,7 +71,10 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
 
         var data = datasets.Active;
         if (data != null && data.IsLoaded) {
-            result["rowCount"] = data.RowCount;
+            // The rows on the sheet, not the rows in the dataset: the metric
+            // count beside it is already a visible count, and a filter can hold
+            // companies back too now, so the two have to be read the same way.
+            result["rowCount"] = data.RowOrder.Count;
             if (data.IsGrouped(true)) {
                 result["metricCount"] = data.GroupCount(true);
                 result["columnsPerMetric"] = new List<object>(data.SeriesTitles);
@@ -91,7 +82,7 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
             else result["columnCount"] = data.ColumnCount;
         }
         if (!alreadyActive)
-            result["note"] = "Row and column numbers now refer to this dataset; call ListDatasets for its sheet ids before using numbers.";
+            result["note"] = "Row and column numbers now refer to this dataset; read it with DescribeSheet before using numbers.";
     }
 
     private static bool TryResolveIndex(ManageDatasets datasets, string query, out int index) {

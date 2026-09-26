@@ -295,7 +295,7 @@ public sealed class OpenIndustrySheet : AgenticTool {
         }
 
         result["opened"] = name;
-        result["companies"] = data.RowCount;
+        result["companies"] = data.RowOrder.Count;
         result["metrics"] = data.GroupCount(true);
         result["years"] = new List<object>(data.SeriesTitles);
         result["note"] = "Its rows are companies and each metric holds one column per year.";

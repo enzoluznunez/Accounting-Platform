@@ -4,12 +4,9 @@ public static class Scene {
 
     private static ManageTools toolManager;
     private static ToolPanelUI toolPanelUI;
-    private static IDataPanel dataPanel;
     private static DataSource dataSource;
     private static Watch watch;
     private static FilterTool filterTool;
-    private static SliceTool sliceTool;
-    private static ColorTool colorTool;
     private static MoveTool moveTool;
     private static RotateTool rotateTool;
     private static ScaleTool scaleTool;
@@ -22,21 +19,8 @@ public static class Scene {
 
     public static ManageTools Tools => Resolve(ref toolManager);
     public static ToolPanelUI ToolPanel => Resolve(ref toolPanelUI);
-    public static IDataPanel DataPanel {
-        get {
-            if (dataPanel == null || (dataPanel is Object o && o == null)) {
-                dataPanel = null;
-                var panels = Object.FindObjectsByType<PanelUI>(FindObjectsSortMode.None);
-                for (int i = 0; i < panels.Length; i++)
-                    if (panels[i] is IDataPanel dp) { dataPanel = dp; break; }
-            }
-            return dataPanel;
-        }
-    }
     public static Watch Assistant => Resolve(ref watch);
     public static FilterTool Filter => Resolve(ref filterTool);
-    public static SliceTool Slice => Resolve(ref sliceTool);
-    public static ColorTool Color => Resolve(ref colorTool);
     public static MoveTool Move => Resolve(ref moveTool);
     public static RotateTool Rotate => Resolve(ref rotateTool);
     public static ScaleTool Scale => Resolve(ref scaleTool);

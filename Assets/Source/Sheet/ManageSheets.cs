@@ -4,11 +4,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using Oculus.Interaction;
 
-public enum SliceAxis { Row, Column }
-
 public class ManageSheets : MonoBehaviour
 {
-    public const int WholeSheetId = 0;
     public const int FirstSheetId = 1;
 
     public DataSource dataSource;
@@ -56,7 +53,6 @@ public class ManageSheets : MonoBehaviour
     private bool _hasProjection;
     private float _projectionRise;
     private Coroutine _projectionRiseRoutine;
-    private readonly Dictionary<long, Color> _cellColors = new Dictionary<long, Color>();
 
     private DataSource _bound;
     private Transform _root;
@@ -75,14 +71,16 @@ public class ManageSheets : MonoBehaviour
     private bool _sheetsGrabbable;
 
     public IReadOnlyList<CreateSheet> Sheets => _sheets;
+
+    // The sheet. There is one: nothing cuts it apart any more, so callers that
+    // used to pick a piece ask for this instead.
+    public CreateSheet Sheet => _sheets.Count > 0 ? _sheets[0] : null;
     public int RowCount => _rowCount;
     public int ColCount => _colCount;
     public float CellSize => _cellSize;
     public float Height => maximumHeight;
     public float BaseY => _baseY;
     public bool IsBuilt => _sheets.Count > 0;
-    public bool HasMultipleSheets => _sheets.Count > 1;
-    public bool IsPresented => _root == null || _root.gameObject.activeSelf;
 
     private bool _recenterHooked;
 
@@ -136,7 +134,6 @@ public class ManageSheets : MonoBehaviour
     {
         Unbind();
         dataSource = source;
-        _cellColors.Clear();
         ClearProjection();
         ClearSheets();
         Bind(source);
@@ -178,7 +175,7 @@ public class ManageSheets : MonoBehaviour
         int maxRow = _rowCount - 1;
         int maxCol = _colCount - 1;
 
-        RefitColumns(data);
+        RefitSpan(data);
 
         bool skipReflow = _skipReflowOnce;
         _skipReflowOnce = false;
@@ -190,7 +187,6 @@ public class ManageSheets : MonoBehaviour
             lineSnapshot = null;
             ClearSheets();
             ClearProjection();
-            _cellColors.Clear();
             ManageDatasets.ActiveEdits.Clear();
             Notices.EditsDropped(this, "The dataset changed shape, so its edits were cleared.");
         }
@@ -200,10 +196,9 @@ public class ManageSheets : MonoBehaviour
             lineSnapshot = null;
             CreateSheet root = NewSheet();
             root.Build(data, cubeMaterial, 0, maxRow, 0, maxCol,
-                _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
+                _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, LabelStyle());
             root.PlayGrow(GrowDuration());
             _sheets.Add(root);
-            ReportPieces();
         }
         else
         {
@@ -218,100 +213,42 @@ public class ManageSheets : MonoBehaviour
 
         _builtColumns.Clear();
         _builtColumns.AddRange(data.ColumnOrder);
+        _builtRows.Clear();
+        _builtRows.AddRange(data.RowOrder);
 
         _placementPending = !ApplyPlacement();
         RebuildProjection();
         OnSheetsChanged?.Invoke();
     }
 
-    // The columns that were on the sheet when it was last built, by data index.
+    // The columns and rows that were on the sheet when it was last built, by data index.
     private readonly List<int> _builtColumns = new List<int>();
+    private readonly List<int> _builtRows = new List<int>();
 
-    // A filter changes which columns exist, so every piece's span is stated in
-    // positions that have just moved. A piece keeps the columns it still has,
-    // found by data index rather than by position, and a piece left with nothing
-    // goes, taking its edits with it. Pieces sliced apart by row share one column
-    // span and go on sharing it.
-    private void RefitColumns(DataSource data)
+    // A filter changes which columns or companies exist, so the sheet's span is
+    // stated in positions that have just moved. The sheet holds every line there
+    // is, so refitting it is restating that: from the first to the last.
+    private void RefitSpan(DataSource data)
     {
-        if (_sheets.Count == 0 || _builtColumns.Count == 0) return;
+        if (_sheets.Count == 0) return;
 
-        IReadOnlyList<int> now = data.ColumnOrder;
-        if (SameColumns(_builtColumns, now)) return;
-
-        var spans = new List<Span>();
-        for (int i = _sheets.Count - 1; i >= 0; i--)
-        {
-            CreateSheet piece = _sheets[i];
-            if (piece == null || SpanFor(spans, piece).max >= 0) continue;
-
-            ManageDatasets.ActiveEdits.DropPiece(piece.sheetId);
-            RemoveSheet(piece);
-        }
-
-        Tile(spans, now.Count - 1);
+        IReadOnlyList<int> cols = data.ColumnOrder;
+        IReadOnlyList<int> rows = data.RowOrder;
+        bool refitCols = _builtColumns.Count > 0 && !SameLines(_builtColumns, cols);
+        bool refitRows = _builtRows.Count > 0 && !SameLines(_builtRows, rows);
+        if (!refitCols && !refitRows) return;
 
         for (int i = 0; i < _sheets.Count; i++)
         {
-            CreateSheet piece = _sheets[i];
-            if (piece == null) continue;
-
-            Span span = SpanFor(spans, piece);
-            piece.colMin = span.min;
-            piece.colMax = span.max;
+            if (_sheets[i] == null) continue;
+            if (refitCols) { _sheets[i].colMin = 0; _sheets[i].colMax = cols.Count - 1; }
+            if (refitRows) { _sheets[i].rowMin = 0; _sheets[i].rowMax = rows.Count - 1; }
         }
     }
 
-    private class Span
-    {
-        public int oldMin, oldMax;
-        public int min, max;
-    }
-
-    // Keyed by the span the piece had, so pieces that shared one before share the
-    // same answer now, and the mapping is worked out once for each.
-    private Span SpanFor(List<Span> spans, CreateSheet piece)
-    {
-        for (int i = 0; i < spans.Count; i++)
-            if (spans[i].oldMin == piece.colMin && spans[i].oldMax == piece.colMax) return spans[i];
-
-        Span span = new Span { oldMin = piece.colMin, oldMax = piece.colMax, min = int.MaxValue, max = -1 };
-        for (int vis = piece.colMin; vis <= piece.colMax; vis++)
-        {
-            if (vis < 0 || vis >= _builtColumns.Count) continue;
-
-            int at = _bound.VisIndexOf(true, _builtColumns[vis]);
-            if (at < 0) continue;
-
-            if (at < span.min) span.min = at;
-            if (at > span.max) span.max = at;
-        }
-
-        spans.Add(span);
-        return span;
-    }
-
-    // The surviving spans still run left to right, but a metric coming back sits
-    // in a gap between them. Each gap is closed onto the span on its left, which
-    // is the piece that metric was cut away with, so the pieces tile the field
-    // again and a metric shown after a slice rejoins the piece it belongs to.
-    private static void Tile(List<Span> spans, int maxCol)
-    {
-        var live = new List<Span>();
-        for (int i = 0; i < spans.Count; i++)
-            if (spans[i].max >= 0) live.Add(spans[i]);
-        if (live.Count == 0) return;
-
-        live.Sort((a, b) => a.min.CompareTo(b.min));
-
-        live[0].min = 0;
-        for (int i = 1; i < live.Count; i++) live[i - 1].max = live[i].min - 1;
-        live[live.Count - 1].max = maxCol;
-    }
-
-    // Set equality, not sequence equality: a reorder leaves every piece's span
-    // untouched and is animated by the reflow instead.
-    private static bool SameColumns(List<int> built, IReadOnlyList<int> now)
+    // Set equality, not sequence equality: a reorder leaves the span untouched and
+    // is animated by the reflow instead.
+    private static bool SameLines(List<int> built, IReadOnlyList<int> now)
     {
         if (built.Count != now.Count) return false;
         for (int i = 0; i < now.Count; i++)
@@ -354,15 +291,25 @@ public class ManageSheets : MonoBehaviour
         gap = labelGap
     };
 
-    private static long CellKey(int dataRow, int dataCol) => ((long)dataRow << 32) | (uint)dataCol;
+    // The industries a piece holds, in row order. What the assistant needs to
+    // answer "what is on this piece", and what a legend would read.
+    public List<string> CategoriesIn(CreateSheet piece)
+    {
+        var found = new List<string>();
+        if (piece == null || _bound == null || !_bound.HasRowCategories) return found;
 
-    public Color TopColorOf(int dataRow, int dataCol) =>
-        _cellColors.TryGetValue(CellKey(dataRow, dataCol), out Color c) ? c : Color.white;
+        IReadOnlyList<int> rowOrder = _bound.RowOrder;
+        var rows = new List<int>();
+        for (int vr = piece.rowMin; vr <= piece.rowMax; vr++)
+            if (vr >= 0 && vr < rowOrder.Count) rows.Add(rowOrder[vr]);
+
+        return _bound.CategoriesInOrder(rows);
+    }
 
     private void RebuildSheet(CreateSheet sheet)
     {
         sheet.Build(_bound, cubeMaterial, sheet.rowMin, sheet.rowMax, sheet.colMin, sheet.colMax,
-            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
+            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, LabelStyle());
     }
 
     public CreateSheet SheetAt(int visRow, int visCol)
@@ -378,111 +325,6 @@ public class ManageSheets : MonoBehaviour
         return sheet != null ? sheet.CubeAt(visRow, visCol) : null;
     }
 
-    public CreateSheet SheetById(int id)
-    {
-        for (int i = 0; i < _sheets.Count; i++)
-            if (_sheets[i].sheetId == id) return _sheets[i];
-        return null;
-    }
-
-    public bool Slice(CreateSheet sheet, SliceAxis axis, int boundary, float gap, out SliceRecord record,
-        bool animate = false)
-    {
-        record = default;
-        if (sheet == null || !_sheets.Contains(sheet) || _bound == null) return false;
-
-        CompletePieceMotion(sheet);
-
-        int aRowMin = sheet.rowMin, aRowMax = sheet.rowMax, aColMin = sheet.colMin, aColMax = sheet.colMax;
-        int bRowMin = sheet.rowMin, bRowMax = sheet.rowMax, bColMin = sheet.colMin, bColMax = sheet.colMax;
-
-        if (axis == SliceAxis.Column)
-        {
-            if (boundary < sheet.colMin || boundary > sheet.colMax - 1) return false;
-            aColMax = boundary;
-            bColMin = boundary + 1;
-        }
-        else
-        {
-            if (boundary < sheet.rowMin || boundary > sheet.rowMax - 1) return false;
-            aRowMax = boundary;
-            bRowMin = boundary + 1;
-        }
-
-        record = new SliceRecord
-        {
-            pRowMin = sheet.rowMin, pRowMax = sheet.rowMax,
-            pColMin = sheet.colMin, pColMax = sheet.colMax,
-            pLocalPos = sheet.transform.localPosition,
-            axis = axis, boundary = boundary, gap = gap
-        };
-
-        Vector3 parentPos = sheet.transform.localPosition;
-        Quaternion parentRot = sheet.transform.localRotation;
-        Vector3 parentScale = sheet.transform.localScale;
-
-        bool columns = axis == SliceAxis.Column;
-        int pMin = columns ? record.pColMin : record.pRowMin;
-        int pMax = columns ? record.pColMax : record.pRowMax;
-        float parentCenter = CreateSheet.Center(pMin, pMax, _cellSize);
-        float half = gap * 0.5f;
-
-        float deltaA = CreateSheet.Center(pMin, boundary, _cellSize) - parentCenter - half;
-        float deltaB = CreateSheet.Center(boundary + 1, pMax, _cellSize) - parentCenter + half;
-
-        sheet.Build(_bound, cubeMaterial, aRowMin, aRowMax, aColMin, aColMax,
-            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
-        sheet.transform.localPosition = parentPos + SliceOffset(parentRot, parentScale, columns, deltaA);
-
-        CreateSheet b = NewSheet();
-        b.transform.localRotation = parentRot;
-        b.transform.localScale = parentScale;
-        b.Build(_bound, cubeMaterial, bRowMin, bRowMax, bColMin, bColMax,
-            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
-        b.transform.localPosition = parentPos + SliceOffset(parentRot, parentScale, columns, deltaB);
-        _sheets.Add(b);
-        ReportPieces();
-
-        record.aId = sheet.sheetId;
-        record.bId = b.sheetId;
-
-        if (animate)
-        {
-            AnimatePieceFrom(sheet, parentPos + SliceOffset(parentRot, parentScale, columns, deltaA + half),
-                parentRot, parentScale);
-            AnimatePieceFrom(b, parentPos + SliceOffset(parentRot, parentScale, columns, deltaB - half),
-                parentRot, parentScale);
-        }
-
-        RebuildProjection();
-        OnSheetsChanged?.Invoke();
-        return true;
-    }
-
-    private static Vector3 SliceOffset(Quaternion rot, Vector3 scale, bool columns, float delta)
-    {
-        Vector3 local = columns ? new Vector3(delta, 0f, 0f) : new Vector3(0f, 0f, delta);
-        return rot * Vector3.Scale(scale, local);
-    }
-
-    public bool UndoSlice(SliceRecord r)
-    {
-        CreateSheet a = SheetById(r.aId);
-        CreateSheet b = SheetById(r.bId);
-        if (a == null || b == null) return false;
-
-        CancelPieceMotion(a);
-        RemoveSheet(b);
-
-        a.Build(_bound, cubeMaterial, r.pRowMin, r.pRowMax, r.pColMin, r.pColMax,
-            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
-        a.transform.localPosition = r.pLocalPos;
-
-        RebuildProjection();
-        OnSheetsChanged?.Invoke();
-        return true;
-    }
-
     public enum UndoResult { Applied, Stale, Unreachable }
 
     public UndoResult Undo(Edit e)
@@ -491,10 +333,6 @@ public class ManageSheets : MonoBehaviour
 
         switch (e.kind)
         {
-            case EditKind.Slice:
-                if (_bound == null) return UndoResult.Unreachable;
-                return UndoSlice(e.slice) ? UndoResult.Applied : UndoResult.Stale;
-
             case EditKind.Move:
             case EditKind.Rotate:
             case EditKind.Scale:
@@ -502,15 +340,13 @@ public class ManageSheets : MonoBehaviour
                 return RestoreSheetPose(e.move.sheetId, e.move.prePos, e.move.preRot, preScale)
                     ? UndoResult.Applied : UndoResult.Stale;
 
-            case EditKind.Color:
-                return UndoColorStroke(e.colorStroke) ? UndoResult.Applied : UndoResult.Stale;
-
             case EditKind.Profile:
                 return UndoResult.Applied;
 
             case EditKind.Filter:
                 if (_bound == null) return UndoResult.Unreachable;
-                _bound.SetHiddenGroups(e.filterPreHidden, out _);
+                if (e.filterIsRow) _bound.SetHiddenRows(e.filterPreHidden, out _);
+                else _bound.SetHiddenGroups(e.filterPreHidden, out _);
                 return UndoResult.Applied;
 
             case EditKind.Sort:
@@ -534,11 +370,6 @@ public class ManageSheets : MonoBehaviour
             Edit e = edits[i];
             switch (e.kind)
             {
-                case EditKind.Slice:
-                    CreateSheet parent = SheetById(e.slice.aId);
-                    if (parent != null) Slice(parent, e.slice.axis, e.slice.boundary, e.slice.gap, out _);
-                    break;
-
                 case EditKind.Move:
                 case EditKind.Rotate:
                 case EditKind.Scale:
@@ -546,94 +377,13 @@ public class ManageSheets : MonoBehaviour
                     RestoreSheetPose(e.move.sheetId, e.move.postPos, e.move.postRot, scale);
                     break;
 
-                case EditKind.Color:
-                    if (e.colorStroke != null && ColorUtility.TryParseHtmlString(e.colorHex, out Color c))
-                        for (int j = 0; j < e.colorStroke.Count; j++)
-                            AddCellColor(e.colorStroke[j].dataRow, e.colorStroke[j].dataCol, c);
-                    break;
-
                 case EditKind.Filter:
-                    _bound.SetHiddenGroups(e.filterPostHidden, out _);
+                    if (e.filterIsRow) _bound.SetHiddenRows(e.filterPostHidden, out _);
+                    else _bound.SetHiddenGroups(e.filterPostHidden, out _);
                     break;
 
             }
         }
-    }
-
-    public void ResetSlices()
-    {
-        if (!HasMultipleSheets) return;
-        ClearSheets();
-        RebuildAll();
-    }
-
-    public void AddCellColor(int dataRow, int dataCol, Color color)
-    {
-        _cellColors[CellKey(dataRow, dataCol)] = color;
-        RepaintCell(dataRow, dataCol, color);
-    }
-
-    public void ClearCellColor(int dataRow, int dataCol)
-    {
-        _cellColors.Remove(CellKey(dataRow, dataCol));
-        RepaintCell(dataRow, dataCol, Color.white);
-    }
-
-    public bool TryGetCellColor(int dataRow, int dataCol, out Color color) =>
-        _cellColors.TryGetValue(CellKey(dataRow, dataCol), out color);
-
-    private void RepaintCell(int dataRow, int dataCol, Color top)
-    {
-        if (_bound == null) return;
-        for (int i = 0; i < _sheets.Count; i++) _sheets[i].RepaintCell(_bound, dataRow, dataCol, top);
-        if (_hasProjection && _projection.view != null) _projection.view.RepaintCell(_bound, dataRow, dataCol, top);
-    }
-
-    public bool UndoColorStroke(List<ColorCell> cells)
-    {
-        if (cells == null || cells.Count == 0) return false;
-
-        for (int i = cells.Count - 1; i >= 0; i--)
-        {
-            ColorCell cell = cells[i];
-            if (!string.IsNullOrEmpty(cell.prevColorHex) &&
-                ColorUtility.TryParseHtmlString(cell.prevColorHex, out Color prev))
-                AddCellColor(cell.dataRow, cell.dataCol, prev);
-            else
-                ClearCellColor(cell.dataRow, cell.dataCol);
-        }
-        return true;
-    }
-
-    public bool TryGetPieceColor(CreateSheet piece, out Color color, out bool mixed)
-    {
-        color = default;
-        mixed = false;
-        if (piece == null || _bound == null || _cellColors.Count == 0) return false;
-
-        IReadOnlyList<int> rowOrder = _bound.RowOrder;
-        IReadOnlyList<int> colOrder = _bound.ColumnOrder;
-        bool any = false;
-        bool bare = false;
-
-        for (int vr = piece.rowMin; vr <= piece.rowMax; vr++)
-        {
-            if (vr < 0 || vr >= rowOrder.Count) continue;
-            for (int vc = piece.colMin; vc <= piece.colMax; vc++)
-            {
-                if (vc < 0 || vc >= colOrder.Count) continue;
-                if (_cellColors.TryGetValue(CellKey(rowOrder[vr], colOrder[vc]), out Color c))
-                {
-                    if (!any) { any = true; color = c; }
-                    else if (c != color) { mixed = true; return false; }
-                }
-                else bare = true;
-            }
-        }
-
-        if (!any) return false;
-        if (bare) { mixed = true; return false; }
-        return true;
     }
 
     public void CubesInLine(bool columns, int visLine, List<CreateCube> into)
@@ -650,38 +400,6 @@ public class ManageSheets : MonoBehaviour
             IReadOnlyList<CreateCube> cubes = s.CubesInLine(columns, visLine);
             for (int j = 0; j < cubes.Count; j++) into.Add(cubes[j]);
         }
-    }
-
-    public List<object> CellColorsSnapshot(DataSource data)
-    {
-        var list = new List<object>();
-        foreach (var kv in _cellColors)
-        {
-            int dataRow = (int)(kv.Key >> 32);
-            int dataCol = (int)(kv.Key & 0xFFFFFFFF);
-            list.Add(new Dictionary<string, object> {
-                { "row", DataTitle(data, false, dataRow) },
-                { "col", DataTitle(data, true, dataCol) },
-                { "hex", "#" + ColorUtility.ToHtmlStringRGB(kv.Value) }
-            });
-        }
-        return list;
-    }
-
-    private static string DataTitle(DataSource data, bool columns, int dataIndex)
-    {
-        IReadOnlyList<string> titles = data != null ? (columns ? data.ColumnTitles : data.RowTitles) : null;
-        return titles != null && dataIndex >= 0 && dataIndex < titles.Count && !string.IsNullOrEmpty(titles[dataIndex])
-            ? titles[dataIndex]
-            : (columns ? "column " : "row ") + (dataIndex + 1);
-    }
-
-    public void ResetColors()
-    {
-        if (_cellColors.Count == 0) return;
-        _cellColors.Clear();
-        for (int i = 0; i < _sheets.Count; i++) _sheets[i].Repaint(_bound, TopColorOf);
-        if (_hasProjection && _projection.view != null) _projection.view.Repaint(_bound, TopColorOf);
     }
 
     public bool PushProjection(ProjectionRecord rec, EditKind kind)
@@ -729,8 +447,16 @@ public class ManageSheets : MonoBehaviour
         return visRow >= 0 && visCol >= 0;
     }
 
-    private static bool SameRecord(ProjectionRecord a, ProjectionRecord b) =>
-        a.isColumn == b.isColumn && a.dataRow == b.dataRow && a.dataCol == b.dataCol;
+    // A column strip on a grouped axis raises its whole metric, so any year of
+    // that metric names the same strip.
+    private bool SameRecord(ProjectionRecord a, ProjectionRecord b)
+    {
+        if (a.isColumn != b.isColumn) return false;
+        if (!a.isColumn) return a.dataRow == b.dataRow;
+        return _bound != null && _bound.IsGrouped(true)
+            ? _bound.DataGroupOf(a.dataCol) == _bound.DataGroupOf(b.dataCol)
+            : a.dataCol == b.dataCol;
+    }
 
     private bool ShowProjection(ProjectionRecord rec, bool animate = false)
     {
@@ -818,7 +544,7 @@ public class ManageSheets : MonoBehaviour
         if (source == null || !source.IsBuilt) return false;
 
         Vector3 originLocal = column
-            ? new Vector3(source.LineOffset(true, visLine), 0f, 0f)
+            ? new Vector3(ColumnStripOffset(source, visLine), 0f, 0f)
             : new Vector3(0f, 0f, source.LineOffset(false, visLine));
         world = source.transform.TransformPoint(originLocal + Vector3.up * (maximumHeight + lift));
         return true;
@@ -830,14 +556,39 @@ public class ManageSheets : MonoBehaviour
         return Mathf.Max(_bound.GetHeightFraction(dataRow, dataCol) * maximumHeight, _baseY);
     }
 
+    // The columns a column strip raises: the whole metric on a grouped axis,
+    // clipped to the piece, or just the one column otherwise.
+    public void ColumnStripSpan(CreateSheet source, int visCol, out int lo, out int hi)
+    {
+        lo = hi = visCol;
+        if (_bound == null || !_bound.IsGrouped(true)) return;
+
+        _bound.GroupSpan(true, _bound.GroupOf(true, visCol), out lo, out hi);
+        if (source == null) return;
+        lo = Mathf.Max(lo, source.colMin);
+        hi = Mathf.Min(hi, source.colMax);
+    }
+
+    // Where a column strip's centre sits across the source piece.
+    private float ColumnStripOffset(CreateSheet source, int visCol)
+    {
+        ColumnStripSpan(source, visCol, out int lo, out int hi);
+        return (source.LineOffset(true, lo) + source.LineOffset(true, hi)) * 0.5f;
+    }
+
     public bool TryStripTopPoint(CreateSheet source, bool column, int visLine, float lift, out Vector3 world)
     {
         if (!TryStripPoint(source, column, visLine, lift, out world)) return false;
 
         float top = _baseY;
-        IReadOnlyList<CreateCube> cubes = source.CubesInLine(column, visLine);
-        for (int i = 0; i < cubes.Count; i++)
-            if (cubes[i] != null) top = Mathf.Max(top, BarTopLocal(cubes[i].dataRow, cubes[i].dataCol));
+        int lo = visLine, hi = visLine;
+        if (column) ColumnStripSpan(source, visLine, out lo, out hi);
+        for (int line = lo; line <= hi; line++)
+        {
+            IReadOnlyList<CreateCube> cubes = source.CubesInLine(column, line);
+            for (int i = 0; i < cubes.Count; i++)
+                if (cubes[i] != null) top = Mathf.Max(top, BarTopLocal(cubes[i].dataRow, cubes[i].dataCol));
+        }
 
         world += source.transform.TransformVector(Vector3.up * top);
         return true;
@@ -889,7 +640,7 @@ public class ManageSheets : MonoBehaviour
         if (rec.isColumn)
         {
             rMin = source.rowMin; rMax = source.rowMax;
-            cMin = cMax = visCol;
+            ColumnStripSpan(source, visCol, out cMin, out cMax);
         }
         else
         {
@@ -898,7 +649,7 @@ public class ManageSheets : MonoBehaviour
         }
 
         view.Build(_bound, cubeMaterial, rMin, rMax, cMin, cMax,
-            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, TopColorOf, LabelStyle());
+            _cellSize, _groupGap, maximumHeight, _baseY, cubeSide, LabelStyle());
         view.SetPickable(false);
 
         return PlaceProjection(p);
@@ -1225,7 +976,6 @@ public class ManageSheets : MonoBehaviour
         _transformGlides.Clear();
 
         CompleteReflow();
-        TruncateSweep();
 
         if (_projectionRiseRoutine != null) { StopCoroutine(_projectionRiseRoutine); _projectionRiseRoutine = null; }
         if (_projectionRise > 0f)
@@ -1386,114 +1136,6 @@ public class ManageSheets : MonoBehaviour
         _transformGlides.Remove(target);
     }
 
-    public void AddCellColorsSwept(List<CreateCube> cubes, Color color)
-    {
-        if (cubes == null || cubes.Count == 0) return;
-
-        var cells = new List<(int row, int col)>(cubes.Count);
-        for (int i = 0; i < cubes.Count; i++)
-        {
-            CreateCube cube = cubes[i];
-            if (cube == null) continue;
-            _cellColors[CellKey(cube.dataRow, cube.dataCol)] = color;
-            cells.Add((cube.dataRow, cube.dataCol));
-        }
-        if (cells.Count == 0) return;
-
-        if (!isActiveAndEnabled || ActiveMotionSpeed <= 0f || AgentInstant)
-        {
-            for (int i = 0; i < cells.Count; i++)
-                RepaintCell(cells[i].row, cells[i].col, TopColorOf(cells[i].row, cells[i].col));
-            return;
-        }
-
-        float interval = _cellSize / Mathf.Max(ActiveMotionSpeed, 1e-3f);
-        interval = Mathf.Min(interval, maxMotionSeconds / cells.Count);
-
-        FinishSweep();
-        _sweepCells = cells;
-        _sweepNext = 0;
-        _sweep = StartCoroutine(PaintSweepRoutine(cells, interval));
-    }
-
-    private Coroutine _sweep;
-    private List<(int row, int col)> _sweepCells;
-    private int _sweepNext;
-
-    private IEnumerator PaintSweepRoutine(List<(int row, int col)> cells, float interval)
-    {
-        for (int i = 0; i < cells.Count; i++)
-        {
-            _sweepNext = i + 1;
-            RepaintCell(cells[i].row, cells[i].col, TopColorOf(cells[i].row, cells[i].col));
-            if (i < cells.Count - 1) yield return new WaitForSeconds(interval);
-        }
-
-        _sweep = null;
-        _sweepCells = null;
-    }
-
-    private void FinishSweep()
-    {
-        if (_sweep != null) { StopCoroutine(_sweep); _sweep = null; }
-        if (_sweepCells == null) return;
-
-        for (int i = _sweepNext; i < _sweepCells.Count; i++)
-            RepaintCell(_sweepCells[i].row, _sweepCells[i].col,
-                TopColorOf(_sweepCells[i].row, _sweepCells[i].col));
-
-        _sweepCells = null;
-        _sweepNext = 0;
-    }
-
-    private void TruncateSweep()
-    {
-        if (_sweep != null) { StopCoroutine(_sweep); _sweep = null; }
-        if (_sweepCells == null) return;
-
-        if (_sweepNext < _sweepCells.Count)
-        {
-            var unpainted = new HashSet<long>();
-            for (int i = _sweepNext; i < _sweepCells.Count; i++)
-                unpainted.Add(CellKey(_sweepCells[i].row, _sweepCells[i].col));
-
-            DropUnpaintedFromStroke(unpainted);
-        }
-
-        _sweepCells = null;
-        _sweepNext = 0;
-    }
-
-    private void DropUnpaintedFromStroke(HashSet<long> unpainted)
-    {
-        EditList edits = ManageDatasets.ActiveEdits;
-        if (edits == null) return;
-
-        for (int i = edits.Count - 1; i >= 0; i--)
-        {
-            Edit e = edits[i];
-            if (e.kind != EditKind.Color || e.colorStroke == null) continue;
-
-            for (int c = e.colorStroke.Count - 1; c >= 0; c--)
-            {
-                ColorCell cell = e.colorStroke[c];
-                long key = CellKey(cell.dataRow, cell.dataCol);
-                if (!unpainted.Contains(key)) continue;
-
-                if (!string.IsNullOrEmpty(cell.prevColorHex) &&
-                    ColorUtility.TryParseHtmlString(cell.prevColorHex, out Color prev))
-                    _cellColors[key] = prev;
-                else
-                    _cellColors.Remove(key);
-
-                e.colorStroke.RemoveAt(c);
-            }
-
-            if (e.colorStroke.Count == 0) edits.DropAt(i);
-            return;
-        }
-    }
-
     public void CommitPendingGrabs()
     {
         for (int i = 0; i < _sheets.Count; i++)
@@ -1506,8 +1148,8 @@ public class ManageSheets : MonoBehaviour
 
     public bool RestoreSheetPose(int sheetId, Vector3 pos, Quaternion rot, Vector3 scale)
     {
-        CreateSheet sheet = SheetById(sheetId);
-        if (sheet == null) return false;
+        CreateSheet sheet = Sheet;
+        if (sheet == null || sheet.sheetId != sheetId) return false;
         CancelPieceMotion(sheet);
         sheet.ForgetGrabLook();
         sheet.transform.localPosition = pos;
@@ -1529,55 +1171,9 @@ public class ManageSheets : MonoBehaviour
         }
     }
 
-    public void SetCellTint(CreateCube cube)
-    {
-        ClearHoverTint();
-        if (cube != null) cube.SetHighlight(Style.EngageSwell);
-    }
-
     public void ClearHoverTint()
     {
         for (int i = 0; i < _sheets.Count; i++) _sheets[i].ClearTint();
-    }
-
-    private Coroutine _dismissRoutine;
-
-    public void SetPresented(bool presented)
-    {
-        EnsureRoot();
-
-        bool dismissing = _dismissRoutine != null;
-        if (dismissing)
-        {
-            StopCoroutine(_dismissRoutine);
-            _dismissRoutine = null;
-        }
-
-        if (presented)
-        {
-            bool wasHidden = dismissing || !_root.gameObject.activeSelf;
-            _root.gameObject.SetActive(true);
-
-            float rise = wasHidden ? GrowDuration() : 0f;
-            for (int i = 0; i < _sheets.Count; i++)
-            {
-                if (_sheets[i] == null) continue;
-                if (rise > 0f) _sheets[i].PlayGrow(rise);
-                else if (dismissing) _sheets[i].SetGrow(1f);
-            }
-            return;
-        }
-
-        if (!_root.gameObject.activeSelf) return;
-
-        float duration = GrowDuration();
-        if (duration <= 0f || _sheets.Count == 0 || !isActiveAndEnabled)
-        {
-            _root.gameObject.SetActive(false);
-            return;
-        }
-
-        _dismissRoutine = StartCoroutine(DismissRoutine(duration));
     }
 
     public void PlaySwitchGrow()
@@ -1587,27 +1183,6 @@ public class ManageSheets : MonoBehaviour
         if (_root == null || !_root.gameObject.activeSelf) return;
         for (int i = 0; i < _sheets.Count; i++)
             if (_sheets[i] != null) _sheets[i].PlayGrow(duration);
-    }
-
-    private IEnumerator DismissRoutine(float duration)
-    {
-        for (int i = 0; i < _sheets.Count; i++)
-            if (_sheets[i] != null) _sheets[i].CompleteGrow();
-
-        float t = 0f;
-        while (t < duration)
-        {
-            yield return null;
-            t += Time.deltaTime;
-            float k = 1f - Mathf.Clamp01(t / duration);
-            for (int i = 0; i < _sheets.Count; i++)
-                if (_sheets[i] != null) _sheets[i].SetGrow(k);
-        }
-
-        _root.gameObject.SetActive(false);
-        for (int i = 0; i < _sheets.Count; i++)
-            if (_sheets[i] != null) _sheets[i].SetGrow(1f);
-        _dismissRoutine = null;
     }
 
     private void EnsureRoot()
@@ -1643,42 +1218,6 @@ public class ManageSheets : MonoBehaviour
         return next;
     }
 
-    private void RemoveSheet(CreateSheet sheet)
-    {
-        if (sheet == null) return;
-        CancelPieceMotion(sheet);
-        _sheets.Remove(sheet);
-        Destroy(sheet.gameObject);
-        ReportPieces();
-    }
-
-    private void ReportPieces()
-    {
-        if (_sheets.Count == 0)
-        {
-            StateChannel.SetState("pieces", "no sheet is built yet");
-            return;
-        }
-
-        var ids = new List<int>(_sheets.Count);
-        for (int i = 0; i < _sheets.Count; i++)
-            if (_sheets[i] != null) ids.Add(_sheets[i].sheetId);
-        ids.Sort();
-
-        if (ids.Count == 1)
-        {
-            StateChannel.SetState("pieces", $"the sheet is in one piece, id {ids[0]}");
-            return;
-        }
-
-        var names = new List<string>(ids.Count);
-        for (int i = 0; i < ids.Count; i++) names.Add($"{ids[i]}");
-        string last = names[names.Count - 1];
-        names.RemoveAt(names.Count - 1);
-        StateChannel.SetState("pieces",
-            $"the sheet is cut into {ids.Count} pieces, ids {string.Join(", ", names)} and {last}");
-    }
-
     private void ClearSheets()
     {
         if (_reflow != null) { StopCoroutine(_reflow); _reflow = null; }
@@ -1687,7 +1226,7 @@ public class ManageSheets : MonoBehaviour
             if (_sheets[i] != null) Destroy(_sheets[i].gameObject);
         _sheets.Clear();
         _builtColumns.Clear();
-        ReportPieces();
+        _builtRows.Clear();
     }
 
     private bool ApplyPlacement()
@@ -1708,7 +1247,14 @@ public class ManageSheets : MonoBehaviour
 
         _anchorCenter = camPos + yaw * new Vector3(
             0f, 0f, Mathf.Max(minimumZOffsetFromCamera, 0f) + halfDepth);
-        _anchorCenter.y = camPos.y - maximumHeight * 0.5f;
+        // Three quarters of the height the user's eyes are at, which the
+        // floor-level tracking origin makes a real height above the floor rather
+        // than an offset from the head: the sheet sits at about chest height for
+        // whoever is wearing it, and a shorter or seated user gets it lower by
+        // the same proportion. Anchoring it a fixed drop below the eye would
+        // follow the head up and down and leave the sheet floating wherever the
+        // user happened to be looking from.
+        _anchorCenter.y = camPos.y * 0.75f;
         _anchorYaw = yaw;
         _anchored = true;
         return true;

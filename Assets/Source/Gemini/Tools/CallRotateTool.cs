@@ -9,28 +9,24 @@ public sealed class CallRotateTool : AgenticTool<CallRotateTool.Args> {
     private const float MaxDegrees = 3600f;
 
     public class Args {
-        [Doc("'by' turns the piece a set amount, 'face' squares it to the user so its columns run left to right, " +
+        [Doc("'by' turns the sheet a set amount, 'face' squares it to the user so its columns run left to right, " +
              "'reset' returns it to the orientation it was built with. Defaults to 'by'."),
          Values("by", "face", "reset"), Optional]
         public string mode;
-        [Doc("For 'by': which way to turn the piece, seen from above from the user's point of view; " +
+        [Doc("For 'by': which way to turn the sheet, seen from above from the user's point of view; " +
              "'right' is clockwise, 'left' is counterclockwise."), Optional]
         public string direction;
         [Doc("For 'by': how far to turn, in degrees. More than a full turn is fine; it is reduced to the equivalent turn, so 730 becomes 10."), Limits(1, 3600), DefaultsTo(90), Optional]
         public float? degrees;
-        [Doc("Target piece."), Optional]
-        public int? sheet;
-        [Doc("Turn several pieces the same way in one go: their sheet ids. Use this instead of calling repeatedly."), Optional]
-        public int[] sheets;
     }
 
     protected override bool EditsAreOutcome => true;
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "CallRotateTool",
-        Description = "Turn a sheet piece about the upright axis, as if the user grabbed it with both hands and " +
+        Description = "Turn the sheet about the upright axis, as if the user grabbed it with both hands and " +
                       "twisted. Mode 'by' is the default and also needs 'direction'; modes 'face' (square it to the " +
-                      "user) and 'reset' (undo any twisting) take neither 'direction' nor 'degrees'. The piece spins in " +
+                      "user) and 'reset' (undo any twisting) take neither 'direction' nor 'degrees'. The sheet spins in " +
                       "place; its position is unchanged.",
         Parameters = ParametersFor(typeof(Args))
     };
@@ -40,15 +36,7 @@ public sealed class CallRotateTool : AgenticTool<CallRotateTool.Args> {
 
         string mode = string.IsNullOrWhiteSpace(args.mode) ? "by" : args.mode.Trim().ToLowerInvariant();
 
-        if (args.sheets != null && args.sheets.Length > 0) {
-            var all = Scene.Sheets;
-            if (ForEachPiece(args.sheets, result, "rotate", (piece, step) => Apply(all, piece, mode, args, step)))
-                result["rotated"] = mode;
-            return;
-        }
-
-        if (!TryResolvePiece(args.sheet, result, "rotate", out var mgr, out var sheet, out int pieceId)) return;
-        result["sheet"] = pieceId;
+        if (!TryResolveSheet(result, "rotate", out var mgr, out var sheet)) return;
 
         Apply(mgr, sheet, mode, args, result);
     }
@@ -85,7 +73,7 @@ public sealed class CallRotateTool : AgenticTool<CallRotateTool.Args> {
         if (degrees < 0.05f) {
             result["degrees"] = 0;
             result["note"] = asked >= 360f
-                ? $"{Math.Round(asked, 1)} degrees is a whole number of full turns, so the piece ends where it started."
+                ? $"{Math.Round(asked, 1)} degrees is a whole number of full turns, so the sheet ends where it started."
                 : "That is too small a turn to see.";
             return;
         }

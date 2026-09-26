@@ -8,7 +8,8 @@ using System.Collections.Generic;
 public static class FinancialsContract {
     public const int LimitMinimum = 1;
     public const int LimitMaximum = 200;
-    public const int LimitDefault = 30;
+    public const int LimitDefault = 100;
+    public const int PerDefault = 10;
 
     public static readonly string[] Metrics = { "working_capital", "current_ratio", "quick_ratio", "accounts_receivable_turnover", "average_days_to_collect_receivables", "inventory_turnover", "average_days_to_collect_inventory", "debt_to_assets", "debt_to_equity", "number_of_times_interest_is_earned", "net_margin", "asset_turnover_ratio", "return_on_investment", "return_on_equity", "earnings_per_share", "book_value_per_share", "price_earnings_ratio", "dividend_yield" };
     public static readonly string[] DefaultMetrics = { "current_ratio", "quick_ratio", "debt_to_equity", "net_margin", "return_on_equity", "asset_turnover_ratio" };

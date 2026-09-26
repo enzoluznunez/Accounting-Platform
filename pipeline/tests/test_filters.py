@@ -3,11 +3,10 @@ it narrows by the right rule, that it never changes what the sheet holds, and
 that every way of getting it wrong comes back as a sentence rather than a stack
 trace: the assistant reads these out loud."""
 
-import csv
-import io
 
 import pytest
 
+import sheetcsv
 from metrics import FUNDAMENTALS, RATIOS
 
 SIC = 7370  # 85 companies, the largest industry in the data
@@ -20,11 +19,7 @@ def sheet(client, query, expect=200):
 
 
 def names(response):
-    # Parsed rather than split: company names contain commas, and sheetcsv
-    # quotes them, so splitting on the delimiter cuts one of them in half.
-    body = response.text.split("\n", 1)[1]  # past the #group directive
-    rows = list(csv.reader(io.StringIO(body)))
-    return [row[0] for row in rows[1:] if row]
+    return [row[0] for row in sheetcsv.read(response.text)[2]]
 
 
 def detail(client, query):
@@ -42,10 +37,12 @@ def test_a_filter_narrows_the_sheet(client):
 
 def test_a_filter_does_not_change_what_the_sheet_holds(client):
     """Filters choose rows. Columns come from 'metrics' and nothing else."""
-    plain = sheet(client, "limit=200").text.splitlines()
-    filtered = sheet(client, "where=revenues:gt:1000").text.splitlines()
-    assert plain[0] == filtered[0] == "#group 2"
-    assert plain[1] == filtered[1]
+    plain, plain_body = sheetcsv.split(sheet(client, "limit=200").text)
+    narrowed, narrowed_body = sheetcsv.split(sheet(client, "where=revenues:gt:1000").text)
+    assert plain["group"] == narrowed["group"] == ["2"]
+    # The header, not the whole first line: '#industry' and '#color' are per-row
+    # and so are expected to be shorter once rows have been filtered away.
+    assert plain_body.splitlines()[0] == narrowed_body.splitlines()[0]
 
 
 def test_predicates_compose(client):
@@ -67,10 +64,8 @@ def test_every_row_really_satisfies_the_filter(client, fundamentals, companies):
     another query."""
     returned = set(names(sheet(client, "where=revenues:gt:1000&match=all")))
 
-    source = fundamentals[fundamentals.sic_code == SIC].merge(
-        companies[["ticker", "name"]], on="ticker"
-    )
-    qualifying = source.groupby("name").revenues.apply(lambda years: (years > 1000).all())
+    source = fundamentals[fundamentals.sic_code == SIC]
+    qualifying = source.groupby("ticker").revenues.apply(lambda years: (years > 1000).all())
     assert returned == set(qualifying[qualifying].index)
 
 

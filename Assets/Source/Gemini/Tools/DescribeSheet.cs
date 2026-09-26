@@ -3,45 +3,32 @@ using System.Collections.Generic;
 using Google.GenAI.Types;
 using UnityEngine;
 
-public sealed class DescribeSheet : AgenticTool<DescribeSheet.Args> {
-
-    public class Args {
-        [Doc("The sheet id, from ListDatasets.")]
-        public int sheet;
-    }
+public sealed class DescribeSheet : AgenticTool {
 
     public override FunctionDeclaration Declaration => new FunctionDeclaration {
         Name = "DescribeSheet",
-        Description = "Read one sheet's shape and placement by its id, from the ids ListDatasets lists for the open " +
-                      "dataset. Returns 'rows' and 'columns', the titles that sheet covers in display order — or " +
+        Description = "Read the sheet's shape and placement. Returns 'rows' and 'columns', its titles in display " +
+                      "order — or " +
                       "'metrics' and 'columnsPerMetric' when the sheet pairs its columns, one metric holding a cell " +
                       "per year — its " +
                       "'rowRange' and 'colRange' (the 1-based numbers those titles start and end at, so a title's " +
                       "number is its position within that range), 'rowCategory' and 'columnCategory' (what the rows " +
-                      "and columns represent, when the data says), its 'position' when it has one, its 'color' (a " +
-                      "single name when every cell shares one, 'mixed' when they differ, absent when uncolored), and " +
+                      "and columns represent, when the data says), its 'position', its 'industry' " +
+                      "(when every row on it belongs to one) or 'industries' (the industries on it, when it holds " +
+                      "more than one), and " +
                       "'projections' (the strips the Profile tool has raised above this " +
-                      "sheet). This carries no cell values; call GetNumbers for the numbers.",
-        Parameters = ParametersFor(typeof(Args))
+                      "sheet). This carries no cell values; call GetNumbers for the numbers."
     };
 
-    protected override void Run(Args args, Dictionary<string, object> result) {
+    protected override void Run(Dictionary<string, object> args, Dictionary<string, object> result) {
         var data = Scene.Data;
-        var mgr = Scene.Sheets;
-        if (data == null || mgr == null || !mgr.IsBuilt) { result["error"] = "No sheet in scene."; return; }
+        if (data == null) { result["error"] = "No sheet in scene."; return; }
+        if (!TryResolveSheet(result, "describe", out ManageSheets mgr, out CreateSheet piece)) return;
 
-        bool whole = args.sheet == ManageSheets.WholeSheetId;
-        CreateSheet piece = whole ? null : mgr.SheetById(args.sheet);
-
-        if (!whole && piece == null) {
-            result["error"] = $"There is no sheet #{args.sheet} on the open dataset; call ListDatasets for current ids.";
-            return;
-        }
-
-        int rowMin = piece != null ? piece.rowMin : 0;
-        int rowMax = piece != null ? piece.rowMax : mgr.RowCount - 1;
-        int colMin = piece != null ? piece.colMin : 0;
-        int colMax = piece != null ? piece.colMax : mgr.ColCount - 1;
+        int rowMin = piece.rowMin;
+        int rowMax = piece.rowMax;
+        int colMin = piece.colMin;
+        int colMax = piece.colMax;
 
         result["rows"] = Titles(data.RowOrder, data.RowTitles, rowMin, rowMax);
         if (rowMin == 0 && rowMax == mgr.RowCount - 1) NoteRefreshed(false);
@@ -72,17 +59,16 @@ public sealed class DescribeSheet : AgenticTool<DescribeSheet.Args> {
         if (!string.IsNullOrEmpty(data.RowAxisTitle)) result["rowCategory"] = data.RowAxisTitle;
         if (!string.IsNullOrEmpty(data.ColumnAxisTitle)) result["columnCategory"] = data.ColumnAxisTitle;
 
-        if (piece != null) {
-            mgr.GetCommittedPose(piece, out Vector3 p, out _, out _);
-            result["position"] = new Dictionary<string, object> {
-                { "columns", Math.Round(p.x, 3) },
-                { "up", Math.Round(p.y, 3) },
-                { "rows", Math.Round(p.z, 3) }
-            };
+        mgr.GetCommittedPose(piece, out Vector3 p, out _, out _);
+        result["position"] = new Dictionary<string, object> {
+            { "columns", Math.Round(p.x, 3) },
+            { "up", Math.Round(p.y, 3) },
+            { "rows", Math.Round(p.z, 3) }
+        };
 
-            if (mgr.TryGetPieceColor(piece, out Color c, out bool mixed)) result["color"] = NearestColorName(c);
-            else if (mixed) result["color"] = "mixed";
-        }
+        List<string> industries = mgr.CategoriesIn(piece);
+        if (industries.Count == 1) result["industry"] = industries[0];
+        else if (industries.Count > 1) result["industries"] = industries.ConvertAll(i => (object)i);
 
         result["projections"] = Projections(mgr, data, rowMin, rowMax, colMin, colMax);
     }
@@ -124,18 +110,4 @@ public sealed class DescribeSheet : AgenticTool<DescribeSheet.Args> {
         return titles;
     }
 
-    private static string NearestColorName(Color c) {
-        var tool = Scene.Color;
-        if (tool == null || tool.palette == null || tool.palette.Length == 0)
-            return "#" + ColorUtility.ToHtmlStringRGB(c);
-
-        int best = 0;
-        float bestDist = float.MaxValue;
-        for (int i = 0; i < tool.palette.Length; i++) {
-            Color p = tool.palette[i];
-            float d = (p.r - c.r) * (p.r - c.r) + (p.g - c.g) * (p.g - c.g) + (p.b - c.b) * (p.b - c.b);
-            if (d < bestDist) { bestDist = d; best = i; }
-        }
-        return best < tool.Options.Count ? tool.Options[best] : "#" + ColorUtility.ToHtmlStringRGB(c);
-    }
 }

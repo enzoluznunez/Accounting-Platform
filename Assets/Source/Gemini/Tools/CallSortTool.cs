@@ -44,8 +44,7 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
                       "by total sales' is one call and needs no separate read. 'by' takes 'measure' to rank each " +
                       "line by its own numbers, or 'line' to rank by a single row or column, so 'sort the months " +
                       "by one item's sales' is one call too. " +
-                      "Positions run across the whole dataset, not within one sliced piece. Undo reverses the " +
-                      "whole reorder.",
+                      "Positions run across the whole dataset. Undo reverses the whole reorder.",
         Parameters = ParametersFor(typeof(Args))
     };
 

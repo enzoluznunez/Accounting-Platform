@@ -144,11 +144,6 @@ public class CreateSheet : MonoBehaviour
         return LineOffset(columns, block * size) + BlockInset(columns);
     }
 
-    // Footprint along each axis, including the extra space between column groups.
-    // With no grouping these are simply ColCount and RowCount cells wide.
-    public float ColumnExtent => LineCoord(true, colMax) - LineCoord(true, colMin) + _cellSize;
-    public float RowExtent => LineCoord(false, rowMax) - LineCoord(false, rowMin) + _cellSize;
-
     public Vector3 LocalOf(int visRow, int visCol) =>
         new Vector3(LineCoord(true, visCol), 0f, LineCoord(false, visRow));
 
@@ -161,7 +156,7 @@ public class CreateSheet : MonoBehaviour
     public void Build(DataSource data, Material material,
         int rMin, int rMax, int cMin, int cMax,
         float cellSize, float groupGap, float height, float baseY, float cubeSide,
-        Func<int, int, Color> topOf, SheetLabelStyle labels)
+        SheetLabelStyle labels)
     {
         if (data == null) return;
 
@@ -217,7 +212,7 @@ public class CreateSheet : MonoBehaviour
                 cube.SetBox(center, size);
                 _bars.Add(new BarTarget { cube = cube, center = center, size = size });
 
-                cube.SetColor(ColorFor(data, has, dRow, dCol, topOf(dRow, dCol)));
+                cube.SetColor(ColorFor(data, has, dRow, dCol));
                 cube.SetVisible(true);
 
                 _byCell[Key(vr, vc)] = cube;
@@ -228,36 +223,13 @@ public class CreateSheet : MonoBehaviour
 
         _live.Clear();
         for (int i = 0; i < used; i++) _live.Add(_pool[i]);
+        _tint = null;
         for (int i = used; i < _pool.Count; i++) _pool[i].SetVisible(false);
 
         FitBounds();
 
         if (_labels == null) _labels = new SheetLabels(transform);
         _labels.Rebuild(data, rMin, rMax, cMin, cMax, cellSize, _groupGap, cubeSide, baseY, labels);
-    }
-
-    public void Repaint(DataSource data, Func<int, int, Color> topOf)
-    {
-        if (data == null) return;
-
-        for (int i = 0; i < _live.Count; i++)
-        {
-            CreateCube cube = _live[i];
-            bool has = data.HasValue(cube.dataRow, cube.dataCol);
-            cube.SetColor(ColorFor(data, has, cube.dataRow, cube.dataCol, topOf(cube.dataRow, cube.dataCol)));
-        }
-    }
-
-    public void RepaintCell(DataSource data, int dataRow, int dataCol, Color top)
-    {
-        if (data == null) return;
-
-        for (int i = 0; i < _live.Count; i++)
-        {
-            CreateCube cube = _live[i];
-            if (cube.dataRow != dataRow || cube.dataCol != dataCol) continue;
-            cube.SetColor(ColorFor(data, data.HasValue(dataRow, dataCol), dataRow, dataCol, top));
-        }
     }
 
     public IReadOnlyList<CreateCube> CubesInLine(bool columns, int line) =>
@@ -306,8 +278,6 @@ public class CreateSheet : MonoBehaviour
         ApplyGrow(1f);
     }
 
-    public void SetGrow(float k) => ApplyGrow(Mathf.Clamp01(k));
-
     private IEnumerator GrowRoutine(float duration)
     {
         float t = 0f;
@@ -350,8 +320,10 @@ public class CreateSheet : MonoBehaviour
         }
     }
 
-    private static Color ColorFor(DataSource data, bool has, int dRow, int dCol, Color top) =>
-        has ? Shade(top, data.GetColorFraction(dRow, dCol)) : NoData;
+    // A bar is drawn in the colour of the industry its row belongs to, which
+    // the sheet states per row, so reordering or filtering never repaints one.
+    private static Color ColorFor(DataSource data, bool has, int dRow, int dCol) =>
+        has ? Shade(data.RowColorAt(dRow), data.GetColorFraction(dRow, dCol)) : NoData;
 
     private static Color Shade(Color top, float t) =>
         Color.Lerp(Color.black, top, PerceptualFraction(t));
@@ -427,8 +399,18 @@ public class CreateSheet : MonoBehaviour
     public void SetHoverTint(int axis, int min, int max) =>
         SetHoverTint(axis, min, max, Style.PreviewSwell);
 
+    // What the bars are lit with now, or null when that is not known (after a
+    // build). A tool re-sends its tint every frame the finger moves, so an
+    // unchanged one is not walked across every bar again.
+    private (int axis, int min, int max, float swell)? _tint;
+    private static readonly (int, int, int, float) Untinted = (0, 0, 0, 0f);
+
     public void SetHoverTint(int axis, int min, int max, float swell)
     {
+        var tint = (axis, min, max, swell);
+        if (_tint == tint) return;
+        _tint = tint;
+
         for (int i = 0; i < _live.Count; i++)
         {
             CreateCube cube = _live[i];
@@ -441,6 +423,9 @@ public class CreateSheet : MonoBehaviour
 
     public void ClearTint()
     {
+        if (_tint == Untinted) return;
+        _tint = Untinted;
+
         for (int i = 0; i < _live.Count; i++) _live[i].ClearHighlight();
     }
 

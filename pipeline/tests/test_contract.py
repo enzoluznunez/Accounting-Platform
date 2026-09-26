@@ -1,42 +1,53 @@
-"""The schema may grow descriptive columns freely; the metric surface may not.
-These tests hold that line so a later SELECT cannot quietly widen it."""
+"""The documents may grow descriptive fields freely; the metric surface may not.
+These tests hold that line so a later projection cannot quietly widen it."""
 
-import psycopg
 import pytest
 
-import api
-from metrics import DEFAULT_METRICS, FUNDAMENTALS, RATIOS
+import database
+import sheetcsv
+from metrics import DEFAULT_METRICS, FUNDAMENTALS, RATIOS, division
 
 
-def columns_of(table):
-    with psycopg.connect(api.DSN) as conn:
-        rows = conn.execute(
-            "SELECT column_name FROM information_schema.columns"
-            " WHERE table_name = %s ORDER BY ordinal_position",
-            (table,),
-        ).fetchall()
-    return [row[0] for row in rows]
+def keys_under(section):
+    """Every figure name stored under one section of any year, across all
+    companies."""
+    found = database.companies().aggregate([
+        {"$unwind": "$years"},
+        {"$project": {"pairs": {"$objectToArray": {"$ifNull": [f"$years.{section}", {}]}}}},
+        {"$unwind": "$pairs"},
+        {"$group": {"_id": "$pairs.k"}},
+    ])
+    return {row["_id"] for row in found}
 
 
-# The partition key is the one column on financials that is neither a key of
-# the row nor a metric. It is admitted here by name so that anything else added
-# to the table still fails this test.
-KEYS = ["ticker", "year", "sic_code"]
+def company_fields():
+    """Every field a company document holds outside its years."""
+    found = database.companies().aggregate([
+        {"$project": {"pairs": {"$objectToArray": "$$ROOT"}}},
+        {"$unwind": "$pairs"},
+        {"$group": {"_id": "$pairs.k"}},
+    ])
+    return {row["_id"] for row in found} - {"years"}
 
 
-def test_financials_holds_exactly_the_metric_surface():
-    assert columns_of("financials") == [*KEYS, *RATIOS]
+# What a company document describes it with. Named here rather than read from
+# the database, so the parametrised test below is decided before anything runs.
+DESCRIPTIVE = ["name", "gvkey", "cik", "sic_code", "division", "address", "city", "country"]
 
 
-def test_fundamentals_holds_nothing_plottable():
-    assert not set(columns_of("fundamentals")) & set(RATIOS)
+def test_ratios_hold_exactly_the_metric_surface():
+    assert keys_under("ratios") == set(RATIOS)
+
+
+def test_fundamentals_hold_nothing_plottable():
+    assert not keys_under("fundamentals") & set(RATIOS)
 
 
 def test_the_two_surfaces_are_disjoint():
     # A ratio is what a sheet draws; a fundamental is what a request filters on.
     # Nothing may be both, or the metric surface widens through the back door.
     assert not set(FUNDAMENTALS) & set(RATIOS)
-    assert columns_of("fundamentals") == [*KEYS, *FUNDAMENTALS]
+    assert keys_under("fundamentals") == set(FUNDAMENTALS)
 
 
 @pytest.mark.parametrize("column", FUNDAMENTALS[:4] + ["sic_code"])
@@ -45,26 +56,21 @@ def test_no_filterable_field_is_accepted_as_a_metric(client, column):
     assert response.status_code == 422
 
 
-def test_companies_holds_nothing_plottable():
-    assert not set(columns_of("companies")) & set(RATIOS)
+def test_companies_hold_nothing_plottable():
+    assert not company_fields() & set(RATIOS)
 
 
-def test_division_is_not_repeated_on_companies():
-    # 3NF: division depends on sic_code, so it lives on industries alone.
-    assert "division" not in columns_of("companies")
-    assert columns_of("industries") == ["sic_code", "division"]
+def test_division_always_agrees_with_the_sic_code():
+    # Division is stored on each company rather than looked up, so it is a
+    # copy of what metrics.division says of the SIC code, and has to stay one.
+    pairs = database.companies().aggregate([
+        {"$group": {"_id": {"sic_code": "$sic_code", "division": "$division"}}},
+    ])
+    for pair in pairs:
+        assert pair["_id"]["division"] == division(pair["_id"]["sic_code"])
 
 
-def test_each_sic_code_has_one_division():
-    with psycopg.connect(api.DSN) as conn:
-        offenders = conn.execute(
-            "SELECT count(*) FROM (SELECT sic_code FROM industries"
-            " GROUP BY sic_code HAVING count(DISTINCT division) > 1) x"
-        ).fetchone()[0]
-    assert offenders == 0
-
-
-@pytest.mark.parametrize("column", [c for c in columns_of("companies") if c != "ticker"])
+@pytest.mark.parametrize("column", DESCRIPTIVE)
 def test_no_descriptive_column_is_accepted_as_a_metric(client, column):
     response = client.get(f"/sheet?sic=7370&metrics={column}")
     assert response.status_code == 422
@@ -72,7 +78,7 @@ def test_no_descriptive_column_is_accepted_as_a_metric(client, column):
 
 
 def test_sheet_header_is_company_plus_metric_year_pairs(client):
-    header = client.get("/sheet?sic=7370&limit=3").text.splitlines()[1].split(",")
+    header = sheetcsv.read(client.get("/sheet?sic=7370&limit=3").text)[1]
     assert header[0] == "Company"
     titles = {metric.replace("_", " ").title() for metric in RATIOS}
     for column in header[1:]:

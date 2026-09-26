@@ -13,6 +13,32 @@ public abstract class DataSource : MonoBehaviour
     public int ColumnCount => _columnTitles.Count;
     public int RowCount => _rowTitles.Count;
 
+    public bool HasRowCategories => _rowCategories.Count > 0;
+
+    public string RowCategoryAt(int dataRow) =>
+        dataRow >= 0 && dataRow < _rowCategories.Count ? _rowCategories[dataRow] : null;
+
+    // White when a sheet carries no categories, which is what an ordinary CSV
+    // loaded by hand is: uncoloured rather than wrongly coloured.
+    public Color RowColorAt(int dataRow) =>
+        dataRow >= 0 && dataRow < _rowColors.Count ? _rowColors[dataRow] : Color.white;
+
+    // The categories present, in the order the rows are in. One entry per block,
+    // so a sheet that arrived blocked by industry reads back as ten names.
+    public List<string> CategoriesInOrder(IReadOnlyList<int> rows)
+    {
+        var found = new List<string>();
+        if (rows == null) return found;
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            string category = RowCategoryAt(rows[i]);
+            if (string.IsNullOrEmpty(category) || found.Contains(category)) continue;
+            found.Add(category);
+        }
+        return found;
+    }
+
     public string ColumnAxisTitle => _columnAxisTitle;
     public string RowAxisTitle => _rowAxisTitle;
 
@@ -22,7 +48,7 @@ public abstract class DataSource : MonoBehaviour
     // arrangement lives on in _columnOrder, which is what a hidden metric comes
     // back into when it is shown again.
     public IReadOnlyList<int> ColumnOrder => _visibleColumns;
-    public IReadOnlyList<int> RowOrder => _rowOrder;
+    public IReadOnlyList<int> RowOrder => _visibleRows;
 
     public string TitleAt(bool columns, int visIndex)
     {
@@ -89,8 +115,6 @@ public abstract class DataSource : MonoBehaviour
 
     public int DataGroupCount => _columnGroupSize > 1 ? ColumnCount / _columnGroupSize : ColumnCount;
 
-    public int HiddenGroupCount => _hiddenGroups.Count;
-
     public bool IsDataGroupHidden(int dataGroup) => _hiddenGroups.Contains(dataGroup);
 
     public int DataGroupOf(int dataColumn) =>
@@ -125,37 +149,97 @@ public abstract class DataSource : MonoBehaviour
 
     // Refused rather than clamped when it would empty the sheet: a sheet with no
     // columns is not a filter the user can see their way out of.
-    public bool SetHiddenGroups(IEnumerable<int> hidden, out string refusal)
+    public bool SetHiddenGroups(IEnumerable<int> hidden, out string refusal) =>
+        SetHidden(_hiddenGroups, hidden, DataGroupCount, GroupNoun(this, true), out refusal);
+
+    // Both axes filter by this: every id has to exist, one line has to stay,
+    // and nothing is announced when the set is unchanged.
+    private bool SetHidden(HashSet<int> target, IEnumerable<int> hidden, int count, string noun,
+                           out string refusal)
     {
         refusal = null;
 
         var wanted = new HashSet<int>();
         if (hidden != null)
-            foreach (int group in hidden)
+            foreach (int id in hidden)
             {
-                if (group < 0 || group >= DataGroupCount)
+                if (id < 0 || id >= count)
                 {
-                    refusal = $"There is no {GroupNoun(this, true)} {group + 1} to hide.";
+                    refusal = $"There is no {noun} {id + 1} to hide.";
                     return false;
                 }
-                wanted.Add(group);
+                wanted.Add(id);
             }
 
-        if (wanted.Count >= DataGroupCount)
+        if (wanted.Count >= count)
         {
-            refusal = $"At least one {GroupNoun(this, true)} has to stay on the sheet.";
+            refusal = $"At least one {noun} has to stay on the sheet.";
             return false;
         }
 
-        if (wanted.SetEquals(_hiddenGroups)) return false;
+        if (wanted.SetEquals(target)) return false;
 
-        _hiddenGroups.Clear();
-        foreach (int group in wanted) _hiddenGroups.Add(group);
+        target.Clear();
+        target.UnionWith(wanted);
         RaiseOrderChanged();
         return true;
     }
 
     public bool ClearHiddenGroups() => SetHiddenGroups(null, out _);
+
+    // The row axis filters the same way the column axis does, one company at a
+    // time rather than by group: rows carry no series, so a hidden row is a
+    // single line off the sheet. Rows are named by their place in the data here
+    // too, so a hidden company survives a sort and comes back where the
+    // arrangement left it.
+
+    private readonly HashSet<int> _hiddenRows = new HashSet<int>();
+    private readonly List<int> _visibleRows = new List<int>();
+
+    public bool IsRowHidden(int dataRow) => _hiddenRows.Contains(dataRow);
+
+    // Data-space row ids in the order they stand on the sheet, hidden ones
+    // included, so a list of companies reads the same whether or not it is
+    // filtered.
+    public List<int> DataRowsInOrder() => new List<int>(_rowOrder);
+
+    public List<int> HiddenRowsInOrder()
+    {
+        var hidden = new List<int>(_hiddenRows.Count);
+        for (int i = 0; i < _rowOrder.Count; i++)
+            if (_hiddenRows.Contains(_rowOrder[i])) hidden.Add(_rowOrder[i]);
+        return hidden;
+    }
+
+    // Refused rather than clamped when it would empty the sheet, for the reason
+    // the column side is: a sheet with no rows is not a filter the user can see
+    // their way out of.
+    public bool SetHiddenRows(IEnumerable<int> hidden, out string refusal) =>
+        SetHidden(_hiddenRows, hidden, RowCount, RowNoun(this), out refusal);
+
+    public bool ClearHiddenRows() => SetHiddenRows(null, out _);
+
+    private void RebuildVisibleRows()
+    {
+        _visibleRows.Clear();
+        for (int i = 0; i < _rowOrder.Count; i++)
+            if (!_hiddenRows.Contains(_rowOrder[i])) _visibleRows.Add(_rowOrder[i]);
+    }
+
+    // What one row is called. A sheet that arrived with industries on it is a
+    // sheet of companies; an ordinary CSV loaded by hand is just rows.
+    public static string RowNoun(DataSource data) =>
+        data != null && data.HasRowCategories ? "company" : "row";
+
+    public static string RowLabelOfData(DataSource data, int dataRow)
+    {
+        if (data != null && dataRow >= 0 && dataRow < data._rowTitles.Count)
+        {
+            string title = data._rowTitles[dataRow];
+            if (!string.IsNullOrEmpty(title)) return title;
+        }
+        return $"{RowNoun(data)} {dataRow + 1}";
+    }
 
     private void RebuildVisibleColumns()
     {
@@ -316,6 +400,14 @@ public abstract class DataSource : MonoBehaviour
 
     protected List<string> _columnTitles = new List<string>();
     protected List<string> _rowTitles = new List<string>();
+
+    // The fourth channel. Rows are companies, columns are metrics, height is the
+    // value, and colour says which industry a row belongs to. Both lists are
+    // per data row and arrive with the sheet rather than being assigned here, so
+    // an industry keeps its colour on every sheet it appears on and filtering
+    // rows away never repaints the ones that remain.
+    protected List<string> _rowCategories = new List<string>();
+    protected List<Color> _rowColors = new List<Color>();
     protected string _columnAxisTitle;
     protected string _rowAxisTitle;
     protected float[,] _values = new float[0, 0];
@@ -436,6 +528,7 @@ public abstract class DataSource : MonoBehaviour
         EnsureOrder(_columnOrder, ColumnCount);
         EnsureOrder(_rowOrder, RowCount);
         RebuildVisibleColumns();
+        RebuildVisibleRows();
     }
 
     private void RaiseOrderChanged()
@@ -493,7 +586,7 @@ public abstract class DataSource : MonoBehaviour
 
     public bool SetRowOrder(IReadOnlyList<int> order, SortMode mode)
     {
-        if (!ApplyOrder(_rowOrder, order, RowCount, 1)) return false;
+        if (!SpliceVisibleRows(order)) return false;
         _rowSortMode = mode;
         RaiseOrderChanged();
         return true;
@@ -512,7 +605,22 @@ public abstract class DataSource : MonoBehaviour
 
     public void MoveRow(int fromPos, int toPos)
     {
-        if (MoveWithin(_rowOrder, fromPos, toPos)) SetRowOrder(_rowOrder, SortMode.Manual);
+        List<int> arrangement = new List<int>(_visibleRows);
+        if (MoveWithin(arrangement, fromPos, toPos)) SetRowOrder(arrangement, SortMode.Manual);
+    }
+
+    private bool SpliceVisibleRows(IReadOnlyList<int> order)
+    {
+        if (order == null || order.Count != _visibleRows.Count) return false;
+        if (!IsRearrangementOf(order, _visibleRows)) return false;
+
+        int taken = 0;
+        for (int i = 0; i < _rowOrder.Count; i++)
+        {
+            if (_hiddenRows.Contains(_rowOrder[i])) continue;
+            _rowOrder[i] = order[taken++];
+        }
+        return true;
     }
 
     private static bool MoveWithin(List<int> order, int fromPos, int toPos)
@@ -539,19 +647,6 @@ public abstract class DataSource : MonoBehaviour
         return true;
     }
 
-    private static bool ApplyOrder(List<int> target, IReadOnlyList<int> order, int count, int groupSize)
-    {
-        if (order == null || order.Count != count || !IsPermutation(order, count)) return false;
-        if (!IsGroupAligned(order, groupSize)) return false;
-
-        if (!ReferenceEquals(target, order))
-        {
-            target.Clear();
-            for (int i = 0; i < order.Count; i++) target.Add(order[i]);
-        }
-        return true;
-    }
-
     // A grouped axis may only be reordered by whole groups, each keeping its
     // members in sequence. Rejecting anything else here makes it impossible for
     // any caller, by hand or by tool, to split a pair.
@@ -566,19 +661,6 @@ public abstract class DataSource : MonoBehaviour
             if (first % groupSize != 0) return false;
             for (int s = 1; s < groupSize; s++)
                 if (order[i + s] != first + s) return false;
-        }
-        return true;
-    }
-
-    private static bool IsPermutation(IReadOnlyList<int> order, int count)
-    {
-        if (count == 0) return order.Count == 0;
-        bool[] seen = new bool[count];
-        for (int i = 0; i < order.Count; i++)
-        {
-            int v = order[i];
-            if (v < 0 || v >= count || seen[v]) return false;
-            seen[v] = true;
         }
         return true;
     }
@@ -647,9 +729,11 @@ public abstract class DataSource : MonoBehaviour
         _columnSortMode = SortMode.Original;
         _rowSortMode = SortMode.Original;
         _hiddenGroups.Clear();
+        _hiddenRows.Clear();
         InitIdentity(_columnOrder, ColumnCount);
         InitIdentity(_rowOrder, RowCount);
         RebuildVisibleColumns();
+        RebuildVisibleRows();
         OnDataLoaded?.Invoke();
     }
 }

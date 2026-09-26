@@ -10,7 +10,7 @@ public sealed class Undo : AgenticTool<Undo.Args> {
         [Doc("Undo every edit. Confirm with the user before setting this."), Optional]
         public bool? all;
         [Doc("The tool whose edit you expect to be newest. Only checked for a single undo.")]
-        [Values("slice", "color", "move", "rotate", "scale", "sort", "filter", "profile"), Optional]
+        [Values("move", "rotate", "scale", "sort", "filter", "profile"), Optional]
         public string tool;
     }
 
@@ -30,8 +30,8 @@ public sealed class Undo : AgenticTool<Undo.Args> {
             return new FunctionDeclaration {
                 Name = "Undo",
                 Description = "Undo recent edits, newest first (the tool panel's Undo / Undo All buttons). " +
-                              "All edits share one timeline: slices, colors, moved/rotated/scaled pieces, Sort reorders, " +
-                              "the projections raised by the Profile tool, and the metrics the Filter tool took off the sheet. " +
+                              "All edits share one timeline: moved/rotated/scaled pieces, Sort reorders, " +
+                              "the projections raised by the Profile tool, and what the Filter tool took off the sheet. " +
                               "Set 'all' to undo everything and clear the tool selection; 'count' never turns into Undo All, " +
                               "it stops when the timeline runs out. " +
                               "Optionally pass 'tool' to assert what the newest edit is; if it does not match, this refuses and names " +
@@ -64,8 +64,6 @@ public sealed class Undo : AgenticTool<Undo.Args> {
         if (!string.IsNullOrWhiteSpace(args.tool)) {
             string requested = args.tool.Trim().ToLowerInvariant();
             EditKind? expected = requested switch {
-                "slice" => EditKind.Slice,
-                "color" => EditKind.Color,
                 "move" => EditKind.Move,
                 "rotate" => EditKind.Rotate,
                 "scale" => EditKind.Scale,
@@ -75,7 +73,7 @@ public sealed class Undo : AgenticTool<Undo.Args> {
                 _ => null
             };
             if (expected == null) {
-                result["error"] = $"Unknown tool '{args.tool}'. Use slice, color, move, rotate, scale, sort, filter, or profile.";
+                result["error"] = $"Unknown tool '{args.tool}'. Use move, rotate, scale, sort, filter, or profile.";
                 return;
             }
             if (top.kind != expected.Value) {

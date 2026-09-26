@@ -6,48 +6,37 @@ manufacturers and nothing at all from six industries. These tests hold the rule
 that replaced it — a few companies from each industry — because it is what keeps
 filtering by industry from coming back empty."""
 
-import csv
-import io
 
 import pytest
 
+import sheetcsv
 from metrics import CATEGORIES, DIVISION_NAMES, RATIOS, SHEET_LIMIT, YEARS, division
 
 
-def rows_of(text):
-    body = text.split("\n", 1)[1]
-    return [row for row in csv.reader(io.StringIO(body)) if row]
-
-
 def names_on(text):
-    return [row[0] for row in rows_of(text)[1:]]
+    return [row[0] for row in sheetcsv.read(text)[2]]
 
 
 def headers_on(text):
-    return rows_of(text)[0][1:]
+    return sheetcsv.read(text)[1][1:]
 
 
-# A sheet names companies, not tickers, and six names in this data belong to
-# more than one company — the same collision api.py keys its pivot around. So a
-# name maps to every industry it could mean, and a test asserts what a name can
-# actually support rather than pretending the mapping is one to one.
+# A sheet labels rows with tickers, and a ticker means one company where six
+# names in this data mean more than one. So the industry of a row follows from
+# its label outright, and every row on the sheet counts towards the spread
+# rather than the ambiguous ones being set aside.
 @pytest.fixture(scope="module")
 def industry_of(companies):
-    mapping = {}
-    for name, sic in zip(companies.name, companies.sic_code):
-        mapping.setdefault(name, set()).add(division(sic))
-    return mapping
+    return {ticker: division(sic)
+            for ticker, sic in zip(companies.ticker, companies.sic_code)}
 
 
 def spread_of(text, industry_of):
-    """How many companies each industry put on the sheet, counting only names
-    that mean one company."""
+    """How many companies each industry put on the sheet."""
     counts = {}
-    for name in names_on(text):
-        options = industry_of[name]
-        if len(options) == 1:
-            only = next(iter(options))
-            counts[only] = counts.get(only, 0) + 1
+    for ticker in names_on(text):
+        industry = industry_of[ticker]
+        counts[industry] = counts.get(industry, 0) + 1
     return counts
 
 
@@ -84,7 +73,7 @@ def test_filtering_to_an_industry_narrows_the_rows(client, industry_of):
     combined = set(names_on(client.get("/sheet?per=3&limit=200").text))
     filtered = names_on(client.get("/sheet?division=Mining&limit=200").text)
     assert filtered
-    assert all("Mining" in industry_of[name] for name in filtered)
+    assert all(industry_of[ticker] == "Mining" for ticker in filtered)
     # The combined sheet showed three miners; the filtered one shows all of them.
     assert len(filtered) > len(combined & set(filtered))
 
@@ -126,5 +115,5 @@ def test_an_unknown_category_points_at_the_grouping(client):
 
 def test_rows_and_columns_narrow_independently(client, industry_of):
     text = client.get("/sheet?division=Mining&categories=liquidity&limit=200").text
-    assert all("Mining" in industry_of[name] for name in names_on(text))
+    assert all(industry_of[ticker] == "Mining" for ticker in names_on(text))
     assert len(headers_on(text)) == len(CATEGORIES["liquidity"]) * len(YEARS)

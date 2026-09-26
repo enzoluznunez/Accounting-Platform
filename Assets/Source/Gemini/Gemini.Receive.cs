@@ -46,9 +46,6 @@ public static partial class Gemini {
         }
 
         Debug.Log($"[Gemini][{(type == "user_utterance" ? "user" : "ada")}] {Spoken(text)}");
-
-        if (type == "user_utterance") EpisodicMemory.Record("user", text);
-        else if (type == "model_utterance") EpisodicMemory.Record("ada", text);
     }
 
     private static async Task ReceivePump(AsyncSession s, int gen, int conn, CancellationToken token) {
@@ -211,8 +208,6 @@ public static partial class Gemini {
                     var watch = Scene.Assistant;
                     if (watch != null) watch.SetGeminiActive(false, AssistantCause.Agent);
                 });
-            else if (ConsumeRefreshRequest()) _ = DoRefresh();
-            else OnTurnComplete();
         }
 
         var parts = content.ModelTurn?.Parts;

@@ -41,7 +41,7 @@ public class MoveTool : Tool
         float distance = sheetManager.transform
             .TransformVector(sheet.transform.localPosition - prePos).magnitude;
 
-        Report($"moved piece {sheet.sheetId} {distance:0.00}m");
+        Report($"moved the sheet {distance:0.00}m");
 
         ManageDatasets.ActiveEdits.PushMove(new MoveRecord
         {

@@ -9,10 +9,7 @@ public class ManageDatasets : MonoBehaviour
     public static DataSource ActiveSource => Instance != null ? Instance.Active : null;
 
     public ManageSheets sheetManager;
-    public PanelUI dataPanelUI;
     public ManageTools toolManager;
-
-    private IDataPanel Panel => dataPanelUI as IDataPanel;
 
     public event Action OnDatasetsChanged;
     public event Action<int> OnActiveDatasetChanged;
@@ -23,7 +20,6 @@ public class ManageDatasets : MonoBehaviour
         public DataSource source;
         public string label;
         public string payload;
-        public int sheetId = ManageSheets.FirstSheetId;
         public bool loaded;
 
         // A parse is in flight exactly while a reader exists that has not
@@ -41,6 +37,12 @@ public class ManageDatasets : MonoBehaviour
 
     private readonly List<Dataset> _datasets = new List<Dataset>();
     private int _active = -1;
+
+    // The dataset most recently asked for that was still being read. Reads
+    // finish in any order, so only this one is switched to when its read lands;
+    // an earlier request that finishes later (the startup sheet, say) is kept
+    // but left in the background.
+    private Dataset _requested;
     private int _datasetsCreated;
     private static readonly EditList Unowned = new EditList();
 
@@ -73,12 +75,6 @@ public class ManageDatasets : MonoBehaviour
     private void ResolveRefs()
     {
         if (sheetManager == null) sheetManager = FindAnyObjectByType<ManageSheets>();
-        if (dataPanelUI == null)
-        {
-            var panels = FindObjectsByType<PanelUI>(FindObjectsSortMode.None);
-            for (int i = 0; i < panels.Length; i++)
-                if (panels[i] is IDataPanel) { dataPanelUI = panels[i]; break; }
-        }
         if (toolManager == null) toolManager = FindAnyObjectByType<ManageTools>();
     }
 
@@ -103,7 +99,7 @@ public class ManageDatasets : MonoBehaviour
             label = label ?? Stylize(DeriveLabel(payload, _datasetsCreated))
         };
         _datasets.Add(dataset);
-        BeginLoad(dataset);
+        SwitchDataset(_datasets.Count - 1);
     }
 
     // A dataset the app knows of but has not read. It is listed straight away and
@@ -148,7 +144,8 @@ public class ManageDatasets : MonoBehaviour
 
     // Reads a listed dataset if it has not been read, and answers when it is
     // ready either way. The assistant awaits this so that it never reports
-    // switching to an industry the app is still reading.
+    // switching to an industry the app is still reading, then switches itself;
+    // reading alone asks for nothing to be shown.
     public Task<bool> EnsureLoaded(int index)
     {
         if (index < 0 || index >= _datasets.Count) return Task.FromResult(false);
@@ -202,6 +199,9 @@ public class ManageDatasets : MonoBehaviour
         Dataset dataset = _datasets[index];
         SettleLoad(dataset, ok);
 
+        bool requested = dataset == _requested;
+        if (requested) _requested = null;
+
         if (!ok)
         {
             // An industry stays in the rail when its file will not read: it is
@@ -218,8 +218,8 @@ public class ManageDatasets : MonoBehaviour
             string payload = dataset.payload;
             RemoveDataset(index);
             OnDatasetLoadFailed?.Invoke(payload);
-            Notices.Show(this, "Scan Failed",
-                reason ?? "Couldn't read a dataset from that QR code.");
+            Notices.Show(this, "Not Read",
+                reason ?? "That dataset could not be read.");
             return;
         }
 
@@ -227,7 +227,7 @@ public class ManageDatasets : MonoBehaviour
 
         StateChannel.Record("Dataset", $"loaded a new dataset, {dataset.label}");
         OnDatasetsChanged?.Invoke();
-        SwitchDataset(index);
+        if (requested) SwitchDataset(index);
     }
 
     public void RemoveDataset(int index)
@@ -236,6 +236,7 @@ public class ManageDatasets : MonoBehaviour
 
         Dataset dataset = _datasets[index];
         bool wasActive = index == _active;
+        if (dataset == _requested) _requested = null;
 
         if (wasActive && sheetManager != null) sheetManager.CommitPendingGrabs();
 
@@ -250,7 +251,6 @@ public class ManageDatasets : MonoBehaviour
             if (_datasets.Count > 0) SwitchDataset(_datasets.Count - 1);
             else
             {
-                if (Panel != null) Panel.Rebind(null);
                 if (sheetManager != null) sheetManager.SetDataSource(null);
             }
         }
@@ -264,22 +264,25 @@ public class ManageDatasets : MonoBehaviour
 
     public void SwitchDataset(int index)
     {
-        if (index < 0 || index >= _datasets.Count || index == _active) return;
+        if (index < 0 || index >= _datasets.Count) return;
+
+        // Any switch supersedes a read still pending from an earlier request,
+        // including asking for the dataset already open.
+        _requested = null;
+        if (index == _active) return;
 
         // A listed industry is read here, the first time it is asked for. The
         // parse finishes on a later frame and lands back in OnDatasetLoadResult,
-        // which switches to it then.
+        // which switches to it then, unless something else was asked for since.
         if (!_datasets[index].loaded)
         {
+            _requested = _datasets[index];
             BeginLoad(_datasets[index]);
             return;
         }
 
         if (sheetManager != null) sheetManager.CommitPendingGrabs();
         if (toolManager != null) toolManager.DeselectTool();
-
-        if (_active >= 0 && _active < _datasets.Count && Panel != null)
-            _datasets[_active].sheetId = Panel.ActiveSheetId;
 
         _active = index;
         Dataset next = _datasets[index];
@@ -288,11 +291,9 @@ public class ManageDatasets : MonoBehaviour
         if (sheetManager != null) sheetManager.PlaySwitchGrow();
         OnActiveDatasetChanged?.Invoke(index);
 
-        if (Panel != null) Panel.ShowSheet(next.sheetId);
-
         StateChannel.RecordState("dataset",
             $"the {(string.IsNullOrEmpty(next.label) ? "dataset" : next.label)} dataset is open" +
-            "; sheet ids, row and column numbers and edits all belong to it");
+            "; row and column numbers and edits all belong to it");
 
         ReportAxes(next.source);
     }
@@ -336,7 +337,6 @@ public class ManageDatasets : MonoBehaviour
 
     private void Rebind(Dataset dataset)
     {
-        TryStep("dataPanel", () => { if (Panel != null) Panel.Rebind(dataset.source); });
         TryStep("sheetManager", () => { if (sheetManager != null) sheetManager.SetDataSource(dataset.source); });
         TryStep("replay", () => { if (sheetManager != null) sheetManager.ReplayEdits(dataset.Edits); });
     }

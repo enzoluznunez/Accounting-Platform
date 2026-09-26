@@ -325,7 +325,6 @@ public class SortTool : Tool
         DataSource.SortMode preMode = columns ? src.ColumnSortMode : src.RowSortMode;
 
         int blockMin = piece == null ? 0 : (columns ? piece.colMin : piece.rowMin) / size;
-        string where = piece != null ? $" in piece {piece.sheetId}" : "";
 
         string what = DataSource.GroupLabelAt(src, columns, from);
         string noun = DataSource.GroupNoun(src, columns) + "s";
@@ -342,7 +341,7 @@ public class SortTool : Tool
             arrangement = $"; the {noun} now run: {string.Join(", ", names)}";
         }
 
-        Report($"moved {what} from position {from - blockMin + 1} to {to - blockMin + 1}{where}{arrangement}");
+        Report($"moved {what} from position {from - blockMin + 1} to {to - blockMin + 1}{arrangement}");
 
         if (StateChannel.UserDriven) StalePositions.MarkDirty(columns);
 

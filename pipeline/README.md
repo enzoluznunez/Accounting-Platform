@@ -65,7 +65,7 @@ reads them itself — the template names them, it never holds them:
 ```sh
 aws sso login --profile nasba
 sam build && sam deploy          # prints ApiUrl when it finishes
-python parity.py --check FILE --url <ApiUrl> --key <key>
+REGRESSION_URL=<ApiUrl> REGRESSION_KEY=<key> pytest tests/test_regression.py
 ```
 
 Atlas has to accept connections from anywhere (`0.0.0.0/0`), since Lambda has
@@ -98,9 +98,18 @@ documents and API. The formula tests check the documents against arithmetic
 done by hand on the cleaned export, and the API tests seed a company or two
 and delete them again. Needs the AWS login and `.env` above.
 
-Changing the database under the API is checked with `parity.py`: record the
-answers before the change, check them after, and every one must match byte for
-byte. The snapshot holds real data, so keep it outside the repository.
+Three kinds of test, all under pytest:
+
+- **Unit** — ratio formulas against hand arithmetic, the document validator,
+  the API key check.
+- **Integration** — every endpoint through FastAPI's test client, against the
+  test database rebuilt from the export.
+- **Regression** — `tests/test_regression.py` sends 174 requests and fails on
+  any answer that differs by a byte from a recording, one test per request.
+  Record before a change with `python regression.py`; the recording holds real
+  data, so it lives in the git-ignored `regression/` and the tests skip without
+  it. Set `REGRESSION_URL` and `REGRESSION_KEY` to hold the deployed API to the
+  same recording.
 
 ## The one list
 

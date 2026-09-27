@@ -137,4 +137,6 @@ __pycache__/
 /pipeline/.env
 # sam build output
 /pipeline/.aws-sam/
+# Recorded API answers: real data, kept off GitHub
+/pipeline/regression/
 

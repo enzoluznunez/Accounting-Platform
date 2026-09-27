@@ -1,27 +1,26 @@
-"""Hold the API to its own past answers across a change of database.
+"""The API's answers, recorded, so a later API can be held to them.
 
-Records every request below against the API as it stands, then checks a later
-API gives back the same status and the same body, byte for byte. The Unity app
-only ever sees these responses, so if they match, the app cannot tell which
-database it is reading.
+tests/test_regression.py sends every request below and fails on any answer
+that differs from the recording by a single byte, status included. The Unity
+app only ever sees these responses, so while they match, a change underneath —
+a new database, a new host, a rewritten pipeline — is invisible to it.
 
-    python parity.py --record FILE    save the current API's answers
-    python parity.py --check FILE     compare the current API against them
-    python parity.py --check FILE --url https://... --key KEY
-                                      compare a deployed API against them
+    python regression.py            record the current API's answers
 
-The snapshot holds real data, so keep it out of the repository.
+Record before a change, change, run pytest. The recording holds real data, so
+it is kept out of the repository (regression/answers.json is git-ignored), and
+without one the regression tests skip rather than fail.
 """
 
-import argparse
 import json
 import sys
 import urllib.error
 import urllib.request
-
-from fastapi.testclient import TestClient
+from pathlib import Path
 
 from metrics import CATEGORIES, DIVISION_NAMES, FUNDAMENTALS, RATIOS
+
+SNAPSHOT = Path(__file__).with_name("regression") / "answers.json"
 
 OPERATORS = ["eq", "ne", "lt", "lte", "gt", "gte"]
 
@@ -80,58 +79,42 @@ def requests():
     return paths
 
 
-def deployed(url, key):
-    """The same requests, sent over the network to a deployed API. Only spaces
-    are escaped, as the test client escapes them, so both see the same URL."""
-    out = {}
-    for path in requests():
-        request = urllib.request.Request(url.rstrip("/") + path.replace(" ", "%20"),
-                                         headers={"X-Api-Key": key} if key else {})
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                out[path] = [response.status, response.read().decode()]
-        except urllib.error.HTTPError as refused:
-            out[path] = [refused.code, refused.read().decode()]
-    return out
+def fetch(url, key, path):
+    """One request sent over the network to a deployed API, as [status, body].
+    Only spaces are escaped, as the test client escapes them, so both see the
+    same URL."""
+    request = urllib.request.Request(url.rstrip("/") + path.replace(" ", "%20"),
+                                     headers={"X-Api-Key": key} if key else {})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return [response.status, response.read().decode()]
+    except urllib.error.HTTPError as refused:
+        return [refused.code, refused.read().decode()]
 
 
-def answers():
+def load():
+    """The recorded answers, or None when nothing has been recorded."""
+    if not SNAPSHOT.exists():
+        return None
+    return json.loads(SNAPSHOT.read_text())
+
+
+def record():
+    from fastapi.testclient import TestClient
+
     import api
 
     with TestClient(api.app) as client:
-        out = {}
+        answers = {}
         for path in requests():
             response = client.get(path)
-            out[path] = [response.status_code, response.text]
-        return out
+            answers[path] = [response.status_code, response.text]
 
-
-def main():
-    parser = argparse.ArgumentParser()
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--record", metavar="FILE")
-    group.add_argument("--check", metavar="FILE")
-    parser.add_argument("--url", help="a deployed API to check instead of this one")
-    parser.add_argument("--key", help="its X-Api-Key")
-    args = parser.parse_args()
-
-    current = deployed(args.url, args.key) if args.url else answers()
-    if args.record:
-        with open(args.record, "w") as handle:
-            json.dump(current, handle, indent=0)
-        print(f"recorded {len(current)} answers to {args.record}")
-        return 0
-
-    with open(args.check) as handle:
-        expected = json.load(handle)
-
-    differing = [path for path in expected if current.get(path) != expected[path]]
-    for path in differing:
-        want, got = expected[path], current.get(path)
-        print(f"DIFFERS {path}\n  was: {want[0]} {want[1][:160]!r}\n  now: {got[0]} {got[1][:160]!r}")
-    print(f"{len(expected) - len(differing)}/{len(expected)} answers identical")
-    return 1 if differing else 0
+    SNAPSHOT.parent.mkdir(exist_ok=True)
+    SNAPSHOT.write_text(json.dumps(answers, indent=0))
+    print(f"recorded {len(answers)} answers to {SNAPSHOT}")
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(record())

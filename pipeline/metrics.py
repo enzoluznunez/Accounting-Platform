@@ -1,5 +1,5 @@
-"""The one list of ratios: ratios.py computes them in this order, the financials
-table stores them in this order, and the API serves them by these names."""
+"""The one list of ratios: ratios.py computes them in this order, each year of a
+company document stores them in this order, and the API serves them by these names."""
 
 RATIOS = [
     "working_capital",

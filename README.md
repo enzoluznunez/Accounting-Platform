@@ -24,9 +24,9 @@ industries.
 
 | Path | What it holds |
 |---|---|
-| `Assets/Source/` | The app's C# code: `Data` fetches and holds sheets, `Sheet` draws them, `Tools` and `UI` are the hand interface, `Gemini` is the voice assistant and the tools it calls. |
+| `Assets/Source/` | The app's C# code: `Main` starts the scene and camera rig, `Data` fetches and holds sheets, `Sheet` draws them, `Tools` and `UI` are the hand interface, `InteractionAPI` holds the hand poses, `Audio` wraps the native microphone and speaker plugins, `Poster` builds the figures `Assets/Editor/PosterCapture.cs` renders for the poster, and `Gemini` is the voice assistant and the tools it calls. |
 | `Assets/Scenes/File Reader.unity` | The one scene the app runs. |
-| `pipeline/` | The Python side: rebuilds the database from the raw export and serves it as an API. See `pipeline/README.md`. |
+| `pipeline/` | The Python side: rebuilds the MongoDB database from the raw export in S3 (48,429 rows, cleaned to 1,249 companies across fiscal 2019–2020) and serves it as an API on AWS Lambda. See `pipeline/README.md`. |
 
 The app ships no data. Every sheet is fetched from the API when it is opened.
 

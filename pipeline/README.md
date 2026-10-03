@@ -71,6 +71,13 @@ REGRESSION_URL=<ApiUrl> REGRESSION_KEY=<key> pytest tests/test_regression.py
 Atlas has to accept connections from anywhere (`0.0.0.0/0`), since Lambda has
 no fixed address; the database password is what keeps it closed.
 
+Set up once with a virtual environment named `.venv` (the Makefile that
+`sam build` runs installs the Lambda package with `.venv/bin/pip`):
+
+```sh
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+```
+
 Requirements are split the same way: `requirements.txt` is what the API needs
 and all that goes into the Lambda package; `requirements-dev.txt` adds the
 pipeline that rebuilds the data, the tests and uvicorn for working on a laptop.

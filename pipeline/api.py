@@ -337,8 +337,8 @@ def list_fields():
 @app.get("/industries", response_model=IndustryList)
 def industries(minimum: Annotated[int, Query(ge=1)] = 1):
     """The industries the database holds, one row per division. There are ten,
-    the same ten the app lists as datasets and the same ten the financials table
-    every company is labelled with, so a name means one thing everywhere. This is the request
+    the same ten the app lists as datasets and the same ten every company
+    document is labelled with, so a name means one thing everywhere. This is the request
     the app makes at startup to know what it can open."""
     rows = database.companies().aggregate([
         {"$group": {"_id": "$division", "companies": {"$sum": 1}, "codes": {"$addToSet": "$sic_code"}}},

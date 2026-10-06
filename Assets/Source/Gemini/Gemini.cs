@@ -28,8 +28,6 @@ public static class Gemini {
 
     private static Client client;
     private static LiveConnectConfig config;
-    private static string promptBody;
-    private static string promptTail;
     private static readonly ConcurrentQueue<byte[]> sendQueue = new ConcurrentQueue<byte[]>();
     private static SemaphoreSlim sendSignal;
     private static SemaphoreSlim actionSignal;
@@ -37,8 +35,6 @@ public static class Gemini {
     private static readonly ConcurrentQueue<string> protocolLog = new ConcurrentQueue<string>();
     private static volatile bool setupCompleted;
     private static volatile bool generationActive;
-    private static volatile bool injecting;
-    private static volatile bool turnPending;
     private static volatile bool shutdownAfterTurn;
 
     private static CancellationTokenSource sessionCts;
@@ -69,8 +65,9 @@ public static class Gemini {
     private const int MaxQueuedFrames = 25;
     private const int GoAwayGraceMs = 8000;
     private const int PreviousDrainMs = 5000;
+    private const int MaxBackoffMs = 5000;
 
-    public static bool Busy => generationActive || turnPending || injecting;
+    private static bool Busy => generationActive;
     public static GeminiStatus Status => _status;
     public static int ToolRoundId => Volatile.Read(ref toolRoundId);
 
@@ -144,7 +141,7 @@ public static class Gemini {
         }
     }
 
-    public static async Task Init(bool webSearch) {
+    private static async Task Init(bool webSearch) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         try {
             webSearchEnabled = webSearch;
@@ -177,17 +174,19 @@ public static class Gemini {
         Debug.Log($"[Gemini] init took {clock.ElapsedMilliseconds} ms");
     }
 
+    private static int lastInstructionChars;
+
     private static void RebuildConfig() {
         var tools = new List<GTool>();
         if (webSearchEnabled) tools.Add(new GTool { GoogleSearch = new GoogleSearch() });
         tools.Add(new GTool { FunctionDeclarations = SystemPrompt.ToolDeclarations() });
 
-        promptBody = SystemPrompt.PromptBody(webSearchEnabled);
-        promptTail = SystemPrompt.PromptTail();
+        string instruction = SystemPrompt.PromptBody(webSearchEnabled) + SystemPrompt.PromptTail();
+        lastInstructionChars = instruction.Length;
 
         config = new LiveConnectConfig {
             SystemInstruction = new Content {
-                Parts = new List<Part> { new Part { Text = promptBody + promptTail } }
+                Parts = new List<Part> { new Part { Text = instruction } }
             },
             ContextWindowCompression = new ContextWindowCompressionConfig {
                 TriggerTokens = SafetyNetTrigger,
@@ -210,18 +209,15 @@ public static class Gemini {
                 }
             },
             InputAudioTranscription = new AudioTranscriptionConfig {
-                LanguageCodes = new List<string> { "en-US" },
-                WordTimestamp = true
+                LanguageCodes = new List<string> { "en-US" }
             },
-            OutputAudioTranscription = new AudioTranscriptionConfig {
-                WordTimestamp = true
-            }
+            OutputAudioTranscription = new AudioTranscriptionConfig()
         };
     }
 
     // Session lifecycle: connecting, reconnecting after GoAway, and shutting down.
 
-    public static void BeginGoAwayReconnect() {
+    private static void BeginGoAwayReconnect() {
         if (goAwayPending) return;
         goAwayGraceUtc = DateTime.UtcNow.AddMilliseconds(GoAwayGraceMs);
         goAwayPending = true;
@@ -235,7 +231,7 @@ public static class Gemini {
             CheckStalledTools();
             if (!goAwayPending) continue;
 
-            bool quiet = !generationActive && !turnPending && !injecting;
+            bool quiet = !Busy;
             if (!quiet && DateTime.UtcNow < goAwayGraceUtc) continue;
 
             goAwayPending = false;
@@ -246,32 +242,22 @@ public static class Gemini {
         }
     }
 
-    private static int lastInstructionChars;
-
-    private static void RefreshSystemInstruction() {
-        if (config == null || promptBody == null) return;
-
-        string instruction = promptBody + promptTail;
-        lastInstructionChars = instruction.Length;
-        config.SystemInstruction = new Content {
-            Parts = new List<Part> { new Part { Text = instruction } }
-        };
-    }
-
     private static async Task RunSessionAsync(int gen, CancellationToken token) {
         int backoffMs = 500;
         int failures = 0;
+        void Backoff() {
+            failures++;
+            backoffMs = Mathf.Min(backoffMs * 2, MaxBackoffMs);
+        }
 
         while (!token.IsCancellationRequested) {
             goAwayPending = false;
             AsyncSession s = null;
             try {
-                RefreshSystemInstruction();
                 config.SessionResumption = new SessionResumptionConfig { Handle = resumeHandle };
                 resumedConnection = resumeHandle != null;
                 setupCompleted = false;
                 generationActive = false;
-                turnPending = false;
                 Interlocked.Exchange(ref toolRoundsThisTurn, 0);
                 ResetTranscripts();
                 ClearPendingCalls();
@@ -304,8 +290,7 @@ public static class Gemini {
                     backoffMs = 500;
                 }
                 else {
-                    failures++;
-                    backoffMs = Mathf.Min(backoffMs * 2, 5000);
+                    Backoff();
                     if (resumeHandle != null) {
                         Debug.LogWarning("[Gemini] session died immediately; dropping stale resume handle and starting fresh");
                         resumeHandle = null;
@@ -318,8 +303,7 @@ public static class Gemini {
             catch (Exception e) {
                 Debug.LogError($"[Gemini] session error: {e}");
                 if (s == null) resumeHandle = null;
-                failures++;
-                backoffMs = Mathf.Min(backoffMs * 2, 5000);
+                Backoff();
             }
             finally {
                 if (s != null) {
@@ -361,7 +345,7 @@ public static class Gemini {
             ResetWindow();
         }
 
-        if (Exhausted) ClearExhaustion();
+        ClearExhaustion();
 
         _status = GeminiStatus.Connecting;
         shutdownAfterTurn = false;
@@ -458,8 +442,7 @@ public static class Gemini {
         }
         if (_listening) return;
         _listening = true;
-        ResetMicAccumulator();
-        while (sendQueue.TryDequeue(out _)) { }
+        ClearPendingMic();
         runAudio(() => {
             Speaker.start();
             Voip.start();
@@ -469,8 +452,7 @@ public static class Gemini {
     public static void Mute() {
         if (!_listening) return;
         _listening = false;
-        ResetMicAccumulator();
-        while (sendQueue.TryDequeue(out _)) { }
+        ClearPendingMic();
         runAudio(() => {
             Speaker.stop();
             Voip.stop();
@@ -490,8 +472,9 @@ public static class Gemini {
     private static int rawMin = int.MaxValue;
     private static int rawMax;
 
-    private static void ResetMicAccumulator() {
+    private static void ClearPendingMic() {
         lock (micGate) micAccumLen = 0;
+        while (sendQueue.TryDequeue(out _)) { }
     }
 
     private static void sendTick(byte[] data) {
@@ -526,85 +509,6 @@ public static class Gemini {
             if (off == 0) return;
             micAccumLen -= off;
             if (micAccumLen > 0) Buffer.BlockCopy(micAccum, off, micAccum, 0, micAccumLen);
-        }
-    }
-
-    public static async Task<bool> InjectPromptAsync(string text, CancellationToken token = default) {
-        if (string.IsNullOrWhiteSpace(text)) return false;
-
-        var s = liveSession;
-        if (s == null || _status != GeminiStatus.Live || !setupCompleted) {
-            Debug.LogWarning("[Gemini][inject] no live session; prompt dropped.");
-            return false;
-        }
-
-        injecting = true;
-        try {
-            ResetMicAccumulator();
-            while (sendQueue.TryDequeue(out _)) { }
-
-            NoteProtocol($"-> clientContent {text.Length}B (turnComplete=true)");
-            await s.SendClientContentAsync(new LiveSendClientContentParameters {
-                Turns = new List<Content> {
-                    new Content {
-                        Role = "user",
-                        Parts = new List<Part> { new Part { Text = text } }
-                    }
-                },
-                TurnComplete = true
-            }).ConfigureAwait(false);
-
-            turnPending = true;
-            return true;
-        }
-        catch (Exception e) {
-            Debug.LogWarning($"[Gemini][inject] failed: {e.Message}");
-            return false;
-        }
-        finally {
-            injecting = false;
-        }
-    }
-
-    public static async Task InjectClipAsync(byte[] pcm16kMono, CancellationToken token = default) {
-        if (pcm16kMono == null || pcm16kMono.Length == 0) return;
-        injecting = true;
-        try {
-            ResetMicAccumulator();
-            while (sendQueue.TryDequeue(out _)) { }
-            for (int off = 0; off < pcm16kMono.Length; off += FrameBytes) {
-                if (token.IsCancellationRequested) break;
-                int len = Math.Min(FrameBytes, pcm16kMono.Length - off);
-                var frame = new byte[len];
-                Array.Copy(pcm16kMono, off, frame, 0, len);
-                sendQueue.Enqueue(frame);
-                while (sendQueue.Count > MaxQueuedFrames && sendQueue.TryDequeue(out _)) { }
-                sendSignal?.Release();
-                try { await Task.Delay(20, token).ConfigureAwait(false); }
-                catch (OperationCanceledException) { break; }
-            }
-
-            while (sendQueue.Count > 0 && !token.IsCancellationRequested) {
-                try { await Task.Delay(10, token).ConfigureAwait(false); }
-                catch (OperationCanceledException) { break; }
-            }
-
-            var s = liveSession;
-            if (s != null) {
-                try {
-                    NoteProtocol("audioStreamEnd");
-                    await s.SendRealtimeInputAsync(new LiveSendRealtimeInputParameters {
-                        AudioStreamEnd = true
-                    }).ConfigureAwait(false);
-                    turnPending = true;
-                }
-                catch (Exception e) {
-                    Debug.LogWarning($"[Gemini] audioStreamEnd failed: {e.Message}");
-                }
-            }
-        }
-        finally {
-            injecting = false;
         }
     }
 
@@ -689,16 +593,12 @@ public static class Gemini {
 
     private static readonly System.Text.StringBuilder inTranscript = new System.Text.StringBuilder();
     private static readonly System.Text.StringBuilder outTranscript = new System.Text.StringBuilder();
-    private static readonly List<WordInfo> inWords = new List<WordInfo>();
-    private static readonly List<WordInfo> outWords = new List<WordInfo>();
     private static bool pendingUserFlush;
     private static string lastUserText;
 
     private static void ResetTranscripts() {
         inTranscript.Clear();
         outTranscript.Clear();
-        inWords.Clear();
-        outWords.Clear();
         pendingUserFlush = false;
         lastUserText = null;
     }
@@ -710,21 +610,19 @@ public static class Gemini {
         return flat.Length <= MaxSpokenChars ? flat : flat.Substring(0, MaxSpokenChars) + "...";
     }
 
-    private static void FlushUtterance(System.Text.StringBuilder buf, List<WordInfo> words, string type) {
-        if (buf.Length == 0) { words.Clear(); return; }
+    private static void FlushUtterance(System.Text.StringBuilder buf, bool isUser) {
+        if (buf.Length == 0) return;
         string text = buf.ToString().Trim();
         buf.Clear();
 
-        words.Clear();
-
         if (text.Length == 0) return;
 
-        if (type == "user_utterance") {
+        if (isUser) {
             if (text == lastUserText) return;
             lastUserText = text;
         }
 
-        Debug.Log($"[Gemini][{(type == "user_utterance" ? "user" : "ada")}] {Spoken(text)}");
+        Debug.Log($"[Gemini][{(isUser ? "user" : "ada")}] {Spoken(text)}");
     }
 
     private static async Task ReceivePump(AsyncSession s, int gen, int conn, CancellationToken token) {
@@ -757,7 +655,7 @@ public static class Gemini {
         HandleContent(response.ServerContent);
         if (pendingUserFlush) {
             pendingUserFlush = false;
-            FlushUtterance(inTranscript, inWords, "user_utterance");
+            FlushUtterance(inTranscript, true);
         }
     }
 
@@ -785,12 +683,11 @@ public static class Gemini {
 
         Debug.Log($"[Gemini][usage] conn={conn} context={context} ({how}) prompt={promptTok} response={usage.ResponseTokenCount} total={usage.TotalTokenCount} session={sessionPromptTokens} cached={cachedTok} uncached={uncachedTok} thoughts={thoughtTok} sessionUncached={sessionUncachedTokens} promptByModality=[{byMod}] at {DateTime.UtcNow:HH:mm:ss.fff}");
 
-        lastPromptTokens = promptTok;
         if (exact && lastExactContext > 0 && context + 2000 < lastExactContext)
             Debug.Log($"[Gemini][window] context fell {lastExactContext} -> {context}; the server trimmed it");
         if (exact) lastExactContext = context;
 
-        if (usable) ObserveTokens(context);
+        if (usable) ObserveCeiling(context);
     }
 
     private static void HandleControl(AsyncSession s, LiveServerMessage response) {
@@ -829,8 +726,9 @@ public static class Gemini {
         if (response.ToolCallCancellation != null) {
             var ids = response.ToolCallCancellation.Ids;
             CancelToolCalls(ids);
-            NoteProtocol($"<- toolCallCancellation ids={(ids != null ? string.Join(",", ids) : "")}");
-            Debug.Log($"[Gemini][diag] toolCallCancellation ids={(ids != null ? string.Join(",", ids) : "")}");
+            string idList = ids != null ? string.Join(",", ids) : "";
+            NoteProtocol($"<- toolCallCancellation ids={idList}");
+            Debug.Log($"[Gemini][diag] toolCallCancellation ids={idList}");
         }
     }
 
@@ -848,36 +746,32 @@ public static class Gemini {
         var inTx = content.InputTranscription;
         if (inTx != null) {
             if (!string.IsNullOrEmpty(inTx.Text)) inTranscript.Append(inTx.Text);
-            if (inTx.Words != null) inWords.AddRange(inTx.Words);
-            if (inTx.Finished == true) FlushUtterance(inTranscript, inWords, "user_utterance");
+            if (inTx.Finished == true) FlushUtterance(inTranscript, true);
         }
 
         var outTx = content.OutputTranscription;
         if (outTx != null) {
             if (!string.IsNullOrEmpty(outTx.Text)) { outTranscript.Append(outTx.Text); generationActive = true; }
-            if (outTx.Words != null) outWords.AddRange(outTx.Words);
-            if (outTx.Finished == true) FlushUtterance(outTranscript, outWords, "model_utterance");
+            if (outTx.Finished == true) FlushUtterance(outTranscript, false);
         }
 
         if (content.Interrupted == true) {
             generationActive = false;
-            turnPending = false;
             NoteProtocol("<- interrupted");
             Speaker.flush();
-            FlushUtterance(outTranscript, outWords, "model_utterance");
+            FlushUtterance(outTranscript, false);
             return;
         }
 
         if (content.TurnComplete == true) {
             generationActive = false;
-            turnPending = false;
             NoteProtocol("<- turnComplete");
 
             var reason = content.TurnCompleteReason;
             if (reason != null) NoteProtocol($"<- turnCompleteReason {reason}");
 
-            FlushUtterance(inTranscript, inWords, "user_utterance");
-            FlushUtterance(outTranscript, outWords, "model_utterance");
+            FlushUtterance(inTranscript, true);
+            FlushUtterance(outTranscript, false);
             pendingUserFlush = false;
             lastUserText = null;
             Interlocked.Exchange(ref toolRoundsThisTurn, 0);
@@ -896,7 +790,7 @@ public static class Gemini {
         for (int i = 0; i < parts.Count; i++) {
             var data = parts[i].InlineData;
             if (data?.Data != null && data.Data.Length > 0 &&
-                data.MimeType != null && data.MimeType.StartsWith("audio/pcm")) {
+                data.MimeType != null && data.MimeType.StartsWith("audio/pcm", StringComparison.Ordinal)) {
                 Speaker.write(data.Data);
             }
         }
@@ -914,7 +808,7 @@ public static class Gemini {
     private static readonly ConcurrentDictionary<string, PendingCall> pendingCalls =
         new ConcurrentDictionary<string, PendingCall>();
 
-    public static void NoteToolDispatched(string id, string name) {
+    private static void NoteToolDispatched(string id, string name) {
         if (string.IsNullOrEmpty(id)) return;
         pendingCalls[id] = new PendingCall { Name = name, SentUtc = DateTime.UtcNow };
     }
@@ -932,7 +826,6 @@ public static class Gemini {
 
         foreach (var pair in pendingCalls) {
             PendingCall call = pair.Value;
-            if (call == null) { pendingCalls.TryRemove(pair.Key, out _); continue; }
             if ((now - call.SentUtc).TotalMilliseconds < ToolStallMs) continue;
             if (!pendingCalls.TryRemove(pair.Key, out _)) continue;
 
@@ -944,7 +837,7 @@ public static class Gemini {
     private static readonly HashSet<string> cancelledCalls = new HashSet<string>();
     private static readonly object cancelGate = new object();
 
-    public static void CancelToolCalls(IEnumerable<string> ids) {
+    private static void CancelToolCalls(IEnumerable<string> ids) {
         if (ids == null) return;
         lock (cancelGate)
             foreach (var id in ids)
@@ -970,27 +863,20 @@ public static class Gemini {
     private static long sessionPromptTokens;
     private static long sessionUncachedTokens;
     private static long lastExactContext;
-    private static long lastPromptTokens = -1;
 
     private static volatile bool exhausted;
     private static volatile bool exhaustWarned;
 
-    public static bool Exhausted => exhausted;
+    private static bool Exhausted => exhausted;
 
-    public static void ResetWindow() {
-        exhausted = false;
-        exhaustWarned = false;
-        ResetContextEstimate();
+    private static void ResetWindow() {
+        ClearExhaustion();
         StateChannel.ClearPending();
-    }
-
-    public static void ResetContextEstimate() {
         usageConnection = 0;
         contextTokens = 0;
         sessionPromptTokens = 0;
         sessionUncachedTokens = 0;
         lastExactContext = 0;
-        lastPromptTokens = -1;
         Interlocked.Exchange(ref toolRoundsThisTurn, 0);
     }
 
@@ -1014,8 +900,6 @@ public static class Gemini {
         return true;
     }
 
-    public static void ObserveTokens(long context) => ObserveCeiling(context);
-
     private static void ObserveCeiling(long context) {
         if (context >= ExhaustTokens) { MarkExhausted(context); return; }
         if (context < ExhaustWarnTokens || exhaustWarned) return;
@@ -1025,7 +909,7 @@ public static class Gemini {
         Interlocked.Exchange(ref pendingClosingNotice, 1);
     }
 
-    public static void ClearExhaustion() {
+    private static void ClearExhaustion() {
         exhausted = false;
         exhaustWarned = false;
     }

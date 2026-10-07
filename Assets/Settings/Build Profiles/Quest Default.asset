@@ -35,8 +35,8 @@ MonoBehaviour:
     - line: '|   targetDevice: 2'
     - line: '|   useOnDemandResources: 0'
     - line: '|   accelerometerFrequency: 60'
-    - line: '|   companyName: Virginia Tech'
-    - line: '|   productName: Conference Version'
+    - line: '|   companyName: Enzo Nunez'
+    - line: '|   productName: Accounting-Platform'
     - line: '|   defaultCursor: {instanceID: 0}'
     - line: '|   cursorHotspot: {x: 0, y: 0}'
     - line: '|   m_SplashScreenBackgroundColor: {r: 0.13725491, g: 0.12156863, b:
@@ -167,7 +167,7 @@ MonoBehaviour:
     - line: '|   loadStoreDebugModeEnabled: 0'
     - line: '|   visionOSBundleVersion: 1.0'
     - line: '|   tvOSBundleVersion: 1.0'
-    - line: '|   bundleVersion: 1'
+    - line: '|   bundleVersion: 1.0'
     - line: '|   preloadedAssets:'
     - line: '|   - {fileID: 11400000, guid: dad7dd33d05c7e446a646be8750f1dfe, type:
         2}'

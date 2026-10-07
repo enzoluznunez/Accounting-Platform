@@ -24,7 +24,7 @@ public static class Gemini {
 
     // Core state.
 
-    public const string ModelId = "gemini-3.1-flash-live-preview";
+    private const string ModelId = "gemini-3.1-flash-live-preview";
 
     private static Client client;
     private static LiveConnectConfig config;
@@ -65,9 +65,10 @@ public static class Gemini {
     private const int MaxQueuedFrames = 25;
     private const int GoAwayGraceMs = 8000;
     private const int PreviousDrainMs = 5000;
+    private const int InitialBackoffMs = 500;
     private const int MaxBackoffMs = 5000;
+    private const int MaxFailures = 5;
 
-    private static bool Busy => generationActive;
     public static GeminiStatus Status => _status;
     public static int ToolRoundId => Volatile.Read(ref toolRoundId);
 
@@ -150,7 +151,7 @@ public static class Gemini {
             client = new Client(apiKey: await keyTask);
             ResetWindow();
 
-            RebuildConfig();
+            BuildConfig();
 
             micGranted = await micTask;
             if (!micGranted) {
@@ -174,15 +175,13 @@ public static class Gemini {
         Debug.Log($"[Gemini] init took {clock.ElapsedMilliseconds} ms");
     }
 
-    private static int lastInstructionChars;
-
-    private static void RebuildConfig() {
+    private static void BuildConfig() {
         var tools = new List<GTool>();
         if (webSearchEnabled) tools.Add(new GTool { GoogleSearch = new GoogleSearch() });
         tools.Add(new GTool { FunctionDeclarations = SystemPrompt.ToolDeclarations() });
 
-        string instruction = SystemPrompt.PromptBody(webSearchEnabled) + SystemPrompt.PromptTail();
-        lastInstructionChars = instruction.Length;
+        string instruction = SystemPrompt.Instruction(webSearchEnabled);
+        Debug.Log($"[Gemini] system instruction: {instruction.Length} chars");
 
         config = new LiveConnectConfig {
             SystemInstruction = new Content {
@@ -231,7 +230,7 @@ public static class Gemini {
             CheckStalledTools();
             if (!goAwayPending) continue;
 
-            bool quiet = !Busy;
+            bool quiet = !generationActive;
             if (!quiet && DateTime.UtcNow < goAwayGraceUtc) continue;
 
             goAwayPending = false;
@@ -243,7 +242,7 @@ public static class Gemini {
     }
 
     private static async Task RunSessionAsync(int gen, CancellationToken token) {
-        int backoffMs = 500;
+        int backoffMs = InitialBackoffMs;
         int failures = 0;
         void Backoff() {
             failures++;
@@ -261,7 +260,7 @@ public static class Gemini {
                 Interlocked.Exchange(ref toolRoundsThisTurn, 0);
                 ResetTranscripts();
                 ClearPendingCalls();
-                Debug.Log($"[Gemini][diag] connecting: model={ModelId}, tools={config.Tools?.Sum(t => t.FunctionDeclarations?.Count ?? 0)}, promptChars={lastInstructionChars}, resume={resumeHandle != null}, serverTrim={SafetyNetTrigger}/{SafetyNetTarget}");
+                Debug.Log($"[Gemini][diag] connecting: model={ModelId}, tools={config.Tools?.Sum(t => t.FunctionDeclarations?.Count ?? 0)}, resume={resumeHandle != null}, serverTrim={SafetyNetTrigger}/{SafetyNetTarget}");
                 s = await client.Live.ConnectAsync(model: ModelId, config: config).ConfigureAwait(false);
                 if (!Current(gen)) break;
                 _status = GeminiStatus.Live;
@@ -287,7 +286,7 @@ public static class Gemini {
 
                 if (sw.ElapsedMilliseconds >= 2000) {
                     failures = 0;
-                    backoffMs = 500;
+                    backoffMs = InitialBackoffMs;
                 }
                 else {
                     Backoff();
@@ -313,13 +312,13 @@ public static class Gemini {
             }
 
             if (token.IsCancellationRequested) break;
-            if (Exhausted) {
+            if (exhausted) {
                 Interlocked.Exchange(ref pendingClosedNotice, 1);
                 break;
             }
             if (!keepAlive) break;
 
-            if (failures >= 5) {
+            if (failures >= MaxFailures) {
                 Debug.LogError("[Gemini] giving up after repeated session failures");
                 SetStatus(gen, GeminiStatus.Failed);
                 break;
@@ -459,7 +458,7 @@ public static class Gemini {
         });
     }
 
-    // Send: mic frames, injected prompts and clips, and pushed state.
+    // Send: mic frames and pushed state.
 
     private const int FrameBytes = 640;
     private const int RawLogInterval = 500;
@@ -538,7 +537,7 @@ public static class Gemini {
     }
 
     private static bool IdleForPush() =>
-        keepAlive && setupCompleted && _status == GeminiStatus.Live && !Busy;
+        keepAlive && setupCompleted && _status == GeminiStatus.Live && !generationActive;
 
     private static async Task ActionPushPump(AsyncSession s, CancellationToken token) {
         while (!token.IsCancellationRequested) {
@@ -611,7 +610,6 @@ public static class Gemini {
     }
 
     private static void FlushUtterance(System.Text.StringBuilder buf, bool isUser) {
-        if (buf.Length == 0) return;
         string text = buf.ToString().Trim();
         buf.Clear();
 
@@ -851,12 +849,12 @@ public static class Gemini {
 
     // Context window: token accounting and the ceiling.
 
-    public const long ContextWindowTokens = 131072;
+    private const long ContextWindowTokens = 131072;
 
-    public const long SafetyNetTrigger = 48000;
-    public const long SafetyNetTarget = 24000;
-    public const long ExhaustTokens = ContextWindowTokens / 2;
-    public const long ExhaustWarnTokens = ExhaustTokens - 6000;
+    private const long SafetyNetTrigger = 48000;
+    private const long SafetyNetTarget = 24000;
+    private const long ExhaustTokens = ContextWindowTokens / 2;
+    private const long ExhaustWarnTokens = ExhaustTokens - 6000;
 
     private static int usageConnection;
     private static long contextTokens;
@@ -867,10 +865,7 @@ public static class Gemini {
     private static volatile bool exhausted;
     private static volatile bool exhaustWarned;
 
-    private static bool Exhausted => exhausted;
-
     private static void ResetWindow() {
-        ClearExhaustion();
         StateChannel.ClearPending();
         usageConnection = 0;
         contextTokens = 0;

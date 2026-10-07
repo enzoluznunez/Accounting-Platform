@@ -186,13 +186,9 @@ public static class SystemPrompt {
             .ToList();
     }
 
-    public static string PromptBody(bool webSearchEnabled) {
+    public static string Instruction(bool webSearchEnabled) {
         return Identity + Loop + BeforeActing + Reading + Acting + Results + Asking + Datasets + Financials + Industries
             + (webSearchEnabled ? Search : "")
-            + Examples;
-    }
-
-    public static string PromptTail() {
-        return Style + Guardrails;
+            + Examples + Style + Guardrails;
     }
 }

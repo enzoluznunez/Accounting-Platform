@@ -57,7 +57,7 @@ public sealed class GetStatistics : AgenticTool<GetStatistics.Args> {
             int count = columns ? colMax + 1 : rowMax + 1;
             var lines = new List<object>();
             for (int v = 0; v < count; v++)
-                lines.Add(columns ? LineEntry(data, true, v, rowMax, colMax) : RowEntry(data, v, colMax));
+                lines.Add(columns ? ColumnEntry(data, v, rowMax) : RowEntry(data, v, colMax));
             result["axis"] = columns ? "columns" : "rows";
             result["lines"] = lines;
             NoteRefreshed(columns);
@@ -77,7 +77,7 @@ public sealed class GetStatistics : AgenticTool<GetStatistics.Args> {
 
         BlockSpan(true, block, 0, colMax, out int lo, out int hi);
         if (lo == hi) {
-            foreach (var kv in LineEntry(data, true, lo, rowMax, colMax)) result[kv.Key] = kv.Value;
+            foreach (var kv in ColumnEntry(data, lo, rowMax)) result[kv.Key] = kv.Value;
             return;
         }
 
@@ -85,7 +85,7 @@ public sealed class GetStatistics : AgenticTool<GetStatistics.Args> {
         // measure and comparing them is the point.
         result["metric"] = DataSource.GroupLabelAt(data, true, block);
         var years = new List<object>();
-        for (int v = lo; v <= hi; v++) years.Add(LineEntry(data, true, v, rowMax, colMax));
+        for (int v = lo; v <= hi; v++) years.Add(ColumnEntry(data, v, rowMax));
         result["years"] = years;
     }
 
@@ -116,23 +116,20 @@ public sealed class GetStatistics : AgenticTool<GetStatistics.Args> {
         return entry;
     }
 
-    private static Dictionary<string, object> LineEntry(DataSource data, bool column, int visLine,
-        int rowMax, int colMax) {
-        SheetStats.Summary s = column
-            ? SheetStats.Over(data, 0, rowMax, visLine, visLine)
-            : SheetStats.Over(data, visLine, visLine, 0, colMax);
+    private static Dictionary<string, object> ColumnEntry(DataSource data, int visCol, int rowMax) {
+        SheetStats.Summary s = SheetStats.Over(data, 0, rowMax, visCol, visCol);
 
         var entry = new Dictionary<string, object> {
-            { "title", data.TitleAt(column, visLine) },
-            { "position", data.GroupOf(column, visLine) + 1 }
+            { "title", data.TitleAt(true, visCol) },
+            { "position", data.GroupOf(true, visCol) + 1 }
         };
 
-        if (data.IsGrouped(column)) {
-            entry["metric"] = DataSource.GroupLabelAt(data, column, data.GroupOf(column, visLine));
-            entry["year"] = data.SeriesTitleAt(column, visLine);
+        if (data.IsGrouped(true)) {
+            entry["metric"] = DataSource.GroupLabelAt(data, true, data.GroupOf(true, visCol));
+            entry["year"] = data.SeriesTitleAt(true, visCol);
         }
 
-        Fill(entry, s, data, column, visLine);
+        Fill(entry, s, data, true, visCol);
         return entry;
     }
 

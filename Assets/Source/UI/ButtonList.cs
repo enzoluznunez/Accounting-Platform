@@ -36,8 +36,6 @@ public class ButtonList
     private readonly Options _options;
     private readonly List<UIButton.Handle> _items = new List<UIButton.Handle>();
 
-    public float MaxItemExtent { get; private set; }
-
     public ButtonList(RectTransform root, Options options)
     {
         _root = root;
@@ -158,14 +156,12 @@ public class ButtonList
 
         le.preferredWidth = extent;
         le.flexibleWidth = 0f;
-        if (extent > MaxItemExtent) MaxItemExtent = extent;
     }
 
     public void Clear()
     {
         UILayout.Clear(_content);
         _items.Clear();
-        MaxItemExtent = 0f;
     }
 
     // A check row spans the list whatever its label measures to, so the squares

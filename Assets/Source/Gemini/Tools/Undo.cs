@@ -10,8 +10,8 @@ public sealed class Undo : AgenticTool<Undo.Args> {
         [Doc("Undo every edit. Confirm with the user before setting this."), Optional]
         public bool? all;
         [Doc("The tool whose edit you expect to be newest. Only checked for a single undo.")]
-        [Values("move", "rotate", "scale", "sort", "filter", "profile"), Optional]
-        public string tool;
+        [Optional]
+        public EditKind? tool;
     }
 
     public override FunctionDeclaration Declaration {
@@ -26,6 +26,8 @@ public sealed class Undo : AgenticTool<Undo.Args> {
                 Description = "How many edits are left on the timeline." };
             response.Properties["failed"] = new Schema { Type = Type.Integer,
                 Description = "Records that no longer matched the scene and were dropped without reverting anything. Never report these as undone." };
+            response.Properties["blocked"] = new Schema { Type = Type.Boolean,
+                Description = "True when undo stopped at an edit it could not revert right now; that edit is still on the timeline." };
 
             return new FunctionDeclaration {
                 Name = "Undo",
@@ -61,29 +63,13 @@ public sealed class Undo : AgenticTool<Undo.Args> {
         int count = 1;
         if (!undoAll && args.count.HasValue) count = args.count.Value < 1 ? 1 : args.count.Value;
 
-        if (!string.IsNullOrWhiteSpace(args.tool)) {
-            string requested = args.tool.Trim().ToLowerInvariant();
-            EditKind? expected = requested switch {
-                "move" => EditKind.Move,
-                "rotate" => EditKind.Rotate,
-                "scale" => EditKind.Scale,
-                "sort" => EditKind.Sort,
-                "filter" => EditKind.Filter,
-                "profile" => EditKind.Profile,
-                _ => null
-            };
-            if (expected == null) {
-                result["error"] = $"Unknown tool '{args.tool}'. Use move, rotate, scale, sort, filter, or profile.";
-                return;
-            }
-            if (top.kind != expected.Value) {
-                Refuse(result, "matching newest edit",
-                    $"The newest edit is from the {Edit.KindName(top.kind)} tool, not the {requested} tool. Undo always " +
-                    "removes the newest edit first. Ask the user which they meant, then call again without 'tool'.");
-                result["nextUndo"] = Edit.KindName(top.kind);
-                result["remaining"] = ManageDatasets.ActiveEdits.Count;
-                return;
-            }
+        if (args.tool.HasValue && top.kind != args.tool.Value) {
+            Refuse(result, "matching newest edit",
+                $"The newest edit is from the {Edit.KindName(top.kind)} tool, not the {Edit.KindName(args.tool.Value)} tool. Undo always " +
+                "removes the newest edit first. Ask the user which they meant, then call again without 'tool'.");
+            result["nextUndo"] = Edit.KindName(top.kind);
+            result["remaining"] = ManageDatasets.ActiveEdits.Count;
+            return;
         }
 
         if (undoAll) {
@@ -101,18 +87,29 @@ public sealed class Undo : AgenticTool<Undo.Args> {
         }
 
         int did = 0, failed = 0;
-        for (int i = 0; i < count && ManageDatasets.ActiveEdits.Peek() != null; i++) {
-            if (controller.Undo()) did++;
-            else failed++;
+        bool blocked = false;
+        for (int i = 0; i < count && !blocked && ManageDatasets.ActiveEdits.Peek() != null; i++) {
+            switch (controller.Undo()) {
+                case ManageSheets.UndoResult.Applied: did++; break;
+                case ManageSheets.UndoResult.Stale: failed++; break;
+                // The record was kept, so trying again would only hit it again.
+                default: blocked = true; break;
+            }
         }
 
         result["undone"] = did;
-        if (did < count)
-            result["note"] = $"Only {did} of the {count} you asked for were on the timeline; the rest never existed.";
+        if (did + failed < count && !blocked)
+            result["note"] = $"Only {did + failed} of the {count} you asked for were on the timeline; the rest never existed.";
         if (failed > 0) {
             result["failed"] = failed;
             result["note"] = failed + " edit(s) could not be reverted because they no longer matched the scene; " +
                              "they were dropped from the history. Tell the user rather than reporting success.";
+        }
+        if (blocked) {
+            result["blocked"] = true;
+            string kept = "The next edit could not be reverted right now because the sheet is not available; it was " +
+                          "kept on the timeline. Tell the user rather than reporting success.";
+            result["note"] = failed > 0 ? result["note"] + " " + kept : kept;
         }
         result["remaining"] = ManageDatasets.ActiveEdits.Count;
         var next = ManageDatasets.ActiveEdits.Peek();

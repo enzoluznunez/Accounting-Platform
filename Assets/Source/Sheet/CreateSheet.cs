@@ -16,9 +16,6 @@ public class CreateSheet : MonoBehaviour
     private static readonly float[] Lightness =
         { 0f, 0.127f, 0.233f, 0.346f, 0.466f, 0.593f, 0.724f, 0.860f, 1f };
 
-    private static readonly List<CreateSheet> _all = new List<CreateSheet>();
-    public static IReadOnlyList<CreateSheet> All => _all;
-
     public int sheetId = -1;
     public int rowMin, rowMax, colMin, colMax;
 
@@ -46,7 +43,6 @@ public class CreateSheet : MonoBehaviour
 
     private readonly List<BarTarget> _bars = new List<BarTarget>();
     private Coroutine _grow;
-    private bool _detached;
     private float _cellSize;
     private float _groupGap;
     private int _groupSize = 1;
@@ -62,20 +58,16 @@ public class CreateSheet : MonoBehaviour
     public int RowCount => rowMax - rowMin + 1;
     public int ColCount => colMax - colMin + 1;
     public float CellSize => _cellSize;
-    public float BaseY => _baseY;
     public bool IsBuilt => _live.Count > 0;
 
     // A grouped axis draws its lines in tight blocks — one metric's years sitting
     // together — with an extra gap between blocks. Every index-to-position
-    // conversion in the app runs through these, so spacing lives in one place and
-    // LineFraction stays exactly LineCoord's inverse.
+    // conversion in the app runs through these, so spacing lives in one place.
     public static float Raw(int line, float cellSize, int groupSize, float groupGap) =>
         line * cellSize + (groupSize > 1 ? (line / groupSize) * groupGap : 0f);
 
     public static float Center(int min, int max, float cellSize, int groupSize, float groupGap) =>
         (Raw(min, cellSize, groupSize, groupGap) + Raw(max, cellSize, groupSize, groupGap)) * 0.5f;
-
-    public static float Center(int min, int max, float cellSize) => Center(min, max, cellSize, 1, 0f);
 
     public int GroupSizeOn(bool columns) => columns ? _groupSize : 1;
     public float GroupGapOn(bool columns) => columns ? _groupGap : 0f;
@@ -85,29 +77,6 @@ public class CreateSheet : MonoBehaviour
 
     public float LineCoord(bool columns, int line) =>
         Raw(line, _cellSize, GroupSizeOn(columns), GroupGapOn(columns)) - (columns ? CenterX : CenterZ);
-
-    public float LineFraction(bool columns, float coord)
-    {
-        if (_cellSize <= 1e-6f) return 0f;
-
-        float p = coord + (columns ? CenterX : CenterZ);
-        int size = GroupSizeOn(columns);
-        float gap = GroupGapOn(columns);
-        if (size <= 1 || gap <= 0f) return p / _cellSize;
-
-        float pitch = size * _cellSize + gap;
-        float block = Mathf.Floor(p / pitch);
-        float within = p - block * pitch;
-
-        // Inside a block the lines sit one cell apart; across the gap the fraction
-        // runs on smoothly to the next block's first line, so a drag never jumps.
-        float edge = (size - 1) * _cellSize;
-        float step = within <= edge
-            ? within / _cellSize
-            : (size - 1) + (within - edge) / (_cellSize + gap);
-
-        return block * size + step;
-    }
 
     // A block is one addressable unit along an axis: a whole metric on a grouped
     // axis, a single line otherwise. Blocks are evenly pitched even when the lines
@@ -143,9 +112,6 @@ public class CreateSheet : MonoBehaviour
         int size = GroupSizeOn(columns);
         return LineOffset(columns, block * size) + BlockInset(columns);
     }
-
-    public Vector3 LocalOf(int visRow, int visCol) =>
-        new Vector3(LineCoord(true, visCol), 0f, LineCoord(false, visRow));
 
     public bool Contains(int visRow, int visCol) =>
         visRow >= rowMin && visRow <= rowMax && visCol >= colMin && visCol <= colMax;
@@ -206,7 +172,7 @@ public class CreateSheet : MonoBehaviour
                 }
 
                 CreateCube cube = Acquire(used++);
-                cube.SetCell(vr, vc, dRow, dCol, data.GetValue(dRow, dCol));
+                cube.SetCell(vr, vc, dRow, dCol);
                 Vector3 center = new Vector3(LineCoord(true, vc), (lo + hi) * 0.5f, z);
                 Vector3 size = new Vector3(half * 2f, hi - lo, half * 2f);
                 cube.SetBox(center, size);
@@ -395,9 +361,6 @@ public class CreateSheet : MonoBehaviour
         for (int i = 0; i < _live.Count; i++)
             if (_live[i] != null) _live[i].transform.localRotation = Quaternion.identity;
     }
-
-    public void SetHoverTint(int axis, int min, int max) =>
-        SetHoverTint(axis, min, max, Style.PreviewSwell);
 
     // What the bars are lit with now, or null when that is not known (after a
     // build). A tool re-sends its tint every frame the finger moves, so an
@@ -601,19 +564,7 @@ public class CreateSheet : MonoBehaviour
         return _pool[index];
     }
 
-    private void OnEnable()
-    {
-        if (!_detached && !_all.Contains(this)) _all.Add(this);
-        StartPendingGrow();
-    }
-
-    private void OnDisable() => _all.Remove(this);
-
-    public void MarkDetached()
-    {
-        _detached = true;
-        _all.Remove(this);
-    }
+    private void OnEnable() => StartPendingGrow();
 
     private static int Key(int visRow, int visCol) => (visRow << 16) | (visCol & 0xFFFF);
 }

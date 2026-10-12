@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Google.GenAI.Types;
-using Type = Google.GenAI.Types.Type;
 
 public sealed class SetDataset : AgenticTool<SetDataset.Args> {
 

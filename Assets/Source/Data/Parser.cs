@@ -66,15 +66,40 @@ public class Parser : DataSource
         }
     }
 
+    // Every load ends in exactly one result, even when the text trips the parser,
+    // so whoever is waiting on it always hears back.
     public void LoadFromCsvText(string csvText)
+    {
+        string failure;
+        try
+        {
+            failure = Parse(csvText);
+        }
+        catch (Exception e)
+        {
+            Debug.LogException(e);
+            failure = "That dataset could not be read.";
+        }
+
+        if (failure != null)
+        {
+            Fail(failure);
+            return;
+        }
+
+        RaiseDataLoaded();
+        ReportResult(true, null);
+    }
+
+    // Fills the grid from CSV text; returns why it could not, or null when it did.
+    private string Parse(string csvText)
     {
         ClearGrid();
         _rawText = csvText;
 
         if (LooksLikeHtml(csvText))
         {
-            Fail("That link returned a web page, not a dataset.");
-            return;
+            return "That link returned a web page, not a dataset.";
         }
 
         string[] lines = csvText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
@@ -96,8 +121,7 @@ public class Parser : DataSource
 
         if (grid.Count < 2)
         {
-            Fail("That dataset has no data rows.");
-            return;
+            return "That dataset has no data rows.";
         }
 
         List<string> header = grid[0];
@@ -136,8 +160,7 @@ public class Parser : DataSource
 
         if (rowCount == 0 || colCount == 0)
         {
-            Fail("That dataset has no rows or columns.");
-            return;
+            return "That dataset has no rows or columns.";
         }
 
         for (int r = 0; r < rowCount; r++)
@@ -157,16 +180,14 @@ public class Parser : DataSource
 
         if (numericCells == 0)
         {
-            Fail("That dataset has no numeric values.");
-            return;
+            return "That dataset has no numeric values.";
         }
 
         EnsureOrders();
 
         Debug.Log($"[Parser:{name}] Loaded grid {rowCount} rows x {colCount} cols " +
                   $"({ColumnGroupSize} col(s) per group, normalised range [{_globalMin}, {_globalMax}])");
-        RaiseDataLoaded();
-        ReportResult(true, null);
+        return null;
     }
 
     private void Fail(string reason)

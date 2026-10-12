@@ -49,15 +49,6 @@ public static class UIMeasure
         return true;
     }
 
-    public static bool TrySize(RectTransform layoutRoot, RectTransform target, out Vector2 size)
-    {
-        size = Vector2.zero;
-        if (!TryRebuild(layoutRoot, target)) return false;
-
-        size = target.rect.size;
-        return true;
-    }
-
     public static bool TryLocalBounds(RectTransform layoutRoot, RectTransform[] targets, Transform space,
         out Vector3 center, out Vector3 size)
     {

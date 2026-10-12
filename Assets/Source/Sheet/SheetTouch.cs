@@ -39,10 +39,9 @@ public class SheetTouch : MonoBehaviour
     private void Update()
     {
         if (_hub == null) return;
+        if (!_hub.Listening) { Drop(); return; }
 
         Rescan();
-
-        if (!_hub.Listening) { Drop(); return; }
 
         if (_driver != null && !Track(_driver)) Drop();
         if (_driver != null) return;

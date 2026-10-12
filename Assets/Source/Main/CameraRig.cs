@@ -17,7 +17,7 @@ public static class CameraRig
         }
     }
 
-    public const float DefaultMaxPitch = 75f;
+    private const float MaxPitch = 75f;
 
     public static Vector3 Flatten(Vector3 v, Vector3 fallback)
     {
@@ -25,8 +25,8 @@ public static class CameraRig
         return v.sqrMagnitude > 1e-6f ? v.normalized : fallback;
     }
 
-    public static bool TryFaceViewer(Vector3 position, float extraPitch, bool adaptPitch,
-        float maxPitch, out Quaternion rotation)
+    // Turns to face the viewer, tilting up or down to meet their eyes.
+    public static bool TryFaceViewer(Vector3 position, out Quaternion rotation)
     {
         rotation = Quaternion.identity;
 
@@ -39,12 +39,8 @@ public static class CameraRig
         float horizontal = flat.magnitude;
         if (horizontal < 1e-4f) return false;
 
-        float tilt = extraPitch;
-        if (adaptPitch)
-        {
-            float elevation = Mathf.Atan2(toViewer.y, horizontal) * Mathf.Rad2Deg;
-            tilt = Mathf.Clamp(elevation + extraPitch, -maxPitch, maxPitch);
-        }
+        float elevation = Mathf.Atan2(toViewer.y, horizontal) * Mathf.Rad2Deg;
+        float tilt = Mathf.Clamp(elevation, -MaxPitch, MaxPitch);
 
         rotation = Quaternion.LookRotation(-flat / horizontal, Vector3.up)
                    * Quaternion.Euler(tilt, 0f, 0f);

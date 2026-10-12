@@ -1,15 +1,12 @@
 using System.Collections.Generic;
 using Google.GenAI.Types;
 using UnityEngine;
-using Type = Google.GenAI.Types.Type;
 
 public sealed class CallScaleTool : AgenticTool<CallScaleTool.Args> {
 
     private const float DefaultPercent = 50f;
     private const float MinPercent = 1f;
     private const float MaxPercent = 100f;
-    private const float MinScale = 0.01f;
-    private const float MaxScale = 2f;
 
     public class Args {
         [Doc("'enlarge' makes the sheet bigger, 'shrink' makes it smaller.")]
@@ -41,7 +38,7 @@ public sealed class CallScaleTool : AgenticTool<CallScaleTool.Args> {
         float mult = enlarge ? 1f + percent / 100f : 1f - percent / 100f;
 
         System.Action<Transform> resize = t => {
-            float v = Mathf.Clamp(t.localScale.x * mult, MinScale, MaxScale);
+            float v = Mathf.Clamp(t.localScale.x * mult, ScaleTool.MinScale, ScaleTool.MaxScale);
             t.localScale = new Vector3(v, v, v);
         };
 

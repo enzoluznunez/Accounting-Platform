@@ -128,11 +128,8 @@ public class ProfileTool : Tool
         int colHi = piece.colMax;
         if (!columns && data.IsGrouped(true))
         {
-            int group = data.GroupOf(true, reading.visCol);
-            data.GroupSpan(true, group, out colLo, out colHi);
-            colLo = Mathf.Max(colLo, piece.colMin);
-            colHi = Mathf.Min(colHi, piece.colMax);
-            title += " · " + DataSource.GroupLabelAt(data, true, group);
+            sheetManager.ColumnStripSpan(piece, reading.visCol, out colLo, out colHi);
+            title += " · " + DataSource.GroupLabelAt(data, true, data.GroupOf(true, reading.visCol));
         }
 
         // A column strip raises the whole metric, so its summary covers every year.

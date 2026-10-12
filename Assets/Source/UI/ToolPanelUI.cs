@@ -284,8 +284,7 @@ public class ToolPanelUI : PanelUI
             (int)Style.SmallPadding, (int)Style.SmallPadding);
         grid.spacing = new Vector2(Style.SmallPadding, Style.SmallPadding);
 
-        LayoutElement le = grid.GetComponent<LayoutElement>();
-        if (le == null) le = grid.gameObject.AddComponent<LayoutElement>();
+        LayoutElement le = UILayout.Ensure<LayoutElement>(grid.gameObject);
         le.minHeight = 0f;
         le.preferredHeight = 0f;
         le.flexibleHeight = 1f;
@@ -367,8 +366,7 @@ public class ToolPanelUI : PanelUI
         // not. Opting out of the layout leaves it to FitTiles to place, from the
         // same cell size and spacing the grid gave the tools.
         RectTransform rect = _assistantButton.Root.GetComponent<RectTransform>();
-        LayoutElement le = _assistantButton.Root.GetComponent<LayoutElement>();
-        if (le == null) le = _assistantButton.Root.AddComponent<LayoutElement>();
+        LayoutElement le = UILayout.Ensure<LayoutElement>(_assistantButton.Root);
         le.ignoreLayout = true;
 
         rect.anchorMin = new Vector2(0f, 1f);
@@ -604,8 +602,7 @@ public class ToolPanelUI : PanelUI
 
             UIButton.Adopt(undoAllBtn.gameObject);
 
-            LayoutElement undoAllLE = undoAllBtn.GetComponent<LayoutElement>();
-            if (undoAllLE == null) undoAllLE = undoAllBtn.gameObject.AddComponent<LayoutElement>();
+            LayoutElement undoAllLE = UILayout.Ensure<LayoutElement>(undoAllBtn.gameObject);
             undoAllLE.minHeight = Style.Button.y;
             undoAllLE.preferredHeight = Style.Button.y;
             undoAllLE.preferredWidth = Style.TitleBarButtonWidth;
@@ -921,42 +918,12 @@ public class ToolPanelUI : PanelUI
         return list;
     }
 
-    // A scrollable column of toggles in a tool's pane, for options that are not
-    // exclusive: unlike a toggle row, any number can be on, so the caller keeps
-    // the handles and lights them itself.
-    // 'name' lets one tool keep more than one list: each replaces only the list
-    // it named, so rebuilding the metrics does not take the categories with it.
-    public ButtonList AddOptionList(ToolType tool, float height, string name = "OptionList")
-    {
-        GameObject content = GetToolContent(tool);
-        if (content == null) return null;
-
-        ReplaceNamed(content.transform, name);
-
-        GameObject host = new GameObject(name);
-        host.transform.SetParent(content.transform, false);
-        RectTransform rect = host.AddComponent<RectTransform>();
-
-        UILayout.FixedHeight(host, height);
-
-        ButtonList list = new ButtonList(rect, new ButtonList.Options
-        {
-            axis = ButtonList.Axis.Vertical,
-            sizing = ButtonList.Sizing.Measured,
-            alignment = TextAnchor.UpperLeft,
-            itemHeight = Style.Subbutton.y,
-            backed = true,
-            scrollable = true
-        });
-
-        host.transform.SetAsLastSibling();
-        return list;
-    }
-
     // A scrollable column of check rows: the label on the left, a square on the
     // right that is filled while the thing is on the sheet. Unlike a toggle row
     // any number can be checked, so the caller keeps the handles and sets the
-    // squares itself.
+    // squares itself. 'name' lets one tool keep more than one list: each replaces
+    // only the list it named, so rebuilding the metrics does not take the
+    // categories with it.
     public ButtonList AddCheckList(ToolType tool, float height, string name = "CheckList")
     {
         GameObject content = GetToolContent(tool);

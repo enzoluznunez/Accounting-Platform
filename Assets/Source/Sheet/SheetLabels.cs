@@ -276,15 +276,10 @@ public class SheetLabels
                 }
             }
 
-            IReadOnlyList<int> rowOrder = data.RowOrder;
-            IReadOnlyList<string> rowTitles = data.RowTitles;
             float edgeX = _rows.high ? _highX : _lowX;
             for (int vr = rowMin; vr <= rowMax; vr++)
             {
-                if (vr < 0 || vr >= rowOrder.Count) continue;
-                int dRow = rowOrder[vr];
-                if (dRow < 0 || dRow >= rowTitles.Count) continue;
-                TextMeshPro label = Place(rowTitles[dRow],
+                TextMeshPro label = Place(data.TitleAt(false, vr),
                     new Vector3(edgeX, y, RowZ(vr)), style.color,
                     Facing(false, _rows.high));
                 if (label != null) _rowLabel[vr] = label;

@@ -19,10 +19,24 @@ public static class UILayout
         }
     }
 
+    public static T Ensure<T>(GameObject go) where T : Component
+    {
+        T c = go.GetComponent<T>();
+        return c != null ? c : go.AddComponent<T>();
+    }
+
+    public static RectTransform EnsureChild(Transform parent, string name)
+    {
+        Transform existing = parent.Find(name);
+        if (existing != null) return existing as RectTransform ?? existing.gameObject.AddComponent<RectTransform>();
+        GameObject child = new GameObject(name);
+        child.transform.SetParent(parent, false);
+        return child.AddComponent<RectTransform>();
+    }
+
     public static LayoutElement FixedHeight(GameObject go, float height)
     {
-        LayoutElement le = go.GetComponent<LayoutElement>();
-        if (le == null) le = go.AddComponent<LayoutElement>();
+        LayoutElement le = Ensure<LayoutElement>(go);
         le.minHeight = height;
         le.preferredHeight = height;
         le.flexibleHeight = 0f;

@@ -108,14 +108,15 @@ public class Tooltip : MonoBehaviour
         SetPanelHeight(HeightFor(body));
 
         if (!isActiveAndEnabled) return;
-        _settle = StartCoroutine(SettleNoticeHeight(body));
+        _settle = StartCoroutine(SettleHeight(_hintGroup, () => HeightFor(body)));
     }
 
-    private IEnumerator SettleNoticeHeight(string body)
+    // Re-fits the panel over the next frames while the shown group's layout settles.
+    private IEnumerator SettleHeight(GameObject group, Func<float> height)
     {
         yield return UILayout.Converge(
-            () => _hintGroup != null && _hintGroup.activeInHierarchy,
-            () => SetPanelHeight(HeightFor(body)),
+            () => group != null && group.activeInHierarchy,
+            () => SetPanelHeight(height()),
             () => _canvasRect != null ? _canvasRect.sizeDelta.y : -1f);
 
         _settle = null;
@@ -161,17 +162,7 @@ public class Tooltip : MonoBehaviour
         SetPanelHeight(StatsHeight());
 
         if (!isActiveAndEnabled) return;
-        _settle = StartCoroutine(SettleStatsHeight());
-    }
-
-    private IEnumerator SettleStatsHeight()
-    {
-        yield return UILayout.Converge(
-            () => _statsGroup != null && _statsGroup.activeInHierarchy,
-            () => SetPanelHeight(StatsHeight()),
-            () => _canvasRect != null ? _canvasRect.sizeDelta.y : -1f);
-
-        _settle = null;
+        _settle = StartCoroutine(SettleHeight(_statsGroup, StatsHeight));
     }
 
     public void HideStats()
@@ -320,8 +311,7 @@ public class Tooltip : MonoBehaviour
 
     private void FaceViewer()
     {
-        if (CameraRig.TryFaceViewer(transform.position, 0f, true, CameraRig.DefaultMaxPitch,
-                out Quaternion rotation))
+        if (CameraRig.TryFaceViewer(transform.position, out Quaternion rotation))
             transform.rotation = rotation;
     }
 

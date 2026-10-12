@@ -165,8 +165,12 @@ public class SortTool : Tool
         _held = null;
         ClearDrag();
 
-        if (!MoveLine(_dragColumns, from, target, sheet)) RestLayout(sheet);
-        RebuildProxies();
+        // A successful move rebuilds the sheet, which rebuilds the handles with it.
+        if (!MoveLine(_dragColumns, from, target, sheet))
+        {
+            RestLayout(sheet);
+            RebuildProxies();
+        }
     }
 
     [Tooltip("Beyond this many steps a set-order request stops animating one line at a time and moves them together.")]
@@ -301,10 +305,8 @@ public class SortTool : Tool
             else yield return null;
         }
 
-        if (sheetManager != null) sheetManager.ForceAgentMotion = false;
         _sequence = null;
-        _sequenceFinish = null;
-        Apply(src, columns, final);
+        CompleteOrderSequence();
     }
 
     // 'from' and 'to' are block positions: whole metrics on a grouped axis, single
@@ -330,9 +332,7 @@ public class SortTool : Tool
         string noun = DataSource.GroupNoun(src, columns) + "s";
 
         var postOrder = new List<int>(preOrder);
-        List<int> moved = postOrder.GetRange(from * size, size);
-        postOrder.RemoveRange(from * size, size);
-        postOrder.InsertRange(to * size, moved);
+        DataSource.MoveGroupWithin(postOrder, from, to, size);
 
         string arrangement = "";
         if (blocks <= 40)
@@ -341,14 +341,20 @@ public class SortTool : Tool
             arrangement = $"; the {noun} now run: {string.Join(", ", names)}";
         }
 
+        ManageDatasets.ActiveEdits.PushSort(columns, preOrder, preMode, from, to);
+
+        // The data can still refuse the order; then nothing moved, so there is
+        // nothing to undo or report, and the caller restores the layout itself.
+        bool moved = columns ? src.MoveColumn(from * size, to * size) : src.MoveRow(from, to);
+        if (!moved)
+        {
+            ManageDatasets.ActiveEdits.Pop();
+            return false;
+        }
+
         Report($"moved {what} from position {from - blockMin + 1} to {to - blockMin + 1}{arrangement}");
 
         if (StateChannel.UserDriven) StalePositions.MarkDirty(columns);
-
-        ManageDatasets.ActiveEdits.PushSort(columns, preOrder, preMode, from, to);
-
-        if (columns) src.MoveColumn(from * size, to * size);
-        else src.MoveRow(from, to);
         return true;
     }
 

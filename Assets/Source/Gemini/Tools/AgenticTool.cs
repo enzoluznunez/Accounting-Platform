@@ -511,17 +511,6 @@ public abstract class AgenticTool : Function {
         return acc.TryScore(measure, out score);
     }
 
-    protected static bool TryLineMeasure(DataSource data, bool isColumn, int line,
-        IReadOnlyList<int> cross, string measure, out double score) {
-
-        var acc = new MeasureAcc();
-        for (int k = 0; k < cross.Count; k++) {
-            int j = cross[k];
-            if (TryCellValue(data, isColumn ? j : line, isColumn ? line : j, out double v)) acc.Add(v);
-        }
-        return acc.TryScore(measure, out score);
-    }
-
     protected static string ActiveDatasetLabel() => Scene.DatasetLabel;
 }
 

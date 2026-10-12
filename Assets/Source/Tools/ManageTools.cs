@@ -90,16 +90,11 @@ public class ManageTools : MonoBehaviour
         return outcome;
     }
 
-    public bool Undo()
+    // Stale also covers an empty timeline: there was nothing to revert.
+    public ManageSheets.UndoResult Undo()
     {
         Edit top = ManageDatasets.ActiveEdits.Peek();
-        if (top == null) return false;
-
-        if (top.kind == EditKind.Sort)
-        {
-            SortTool sort = Scene.Sort;
-            if (sort != null) sort.HaltOrderSequence();
-        }
+        if (top == null) return ManageSheets.UndoResult.Stale;
 
         int inGroup = ManageDatasets.ActiveEdits.TopGroupSize();
 
@@ -113,7 +108,16 @@ public class ManageTools : MonoBehaviour
             else sortRows = true;
         }
 
-        switch (UndoTop(out string kindName))
+        // An animated sort anywhere in the group must stop before its record is
+        // undone, or its last step would put the order straight back.
+        if (sortRows || sortColumns)
+        {
+            SortTool sort = Scene.Sort;
+            if (sort != null) sort.HaltOrderSequence();
+        }
+
+        ManageSheets.UndoResult outcome = UndoTop(out string kindName);
+        switch (outcome)
         {
             case ManageSheets.UndoResult.Applied:
                 for (int i = 1; i < inGroup; i++)
@@ -126,16 +130,17 @@ public class ManageTools : MonoBehaviour
                 StateChannel.Record("Undo", inGroup > 1
                     ? $"undid the {kindName} edit ({inGroup} steps, one action)"
                     : $"undid the {kindName} edit");
-                return true;
+                break;
 
             case ManageSheets.UndoResult.Unreachable:
                 Debug.LogWarning($"[ManageTools] {kindName} undo could not run; the record was kept.");
-                return false;
+                break;
 
             default:
                 Debug.LogWarning($"[ManageTools] {kindName} undo no longer matches the scene; the record was dropped.");
-                return false;
+                break;
         }
+        return outcome;
     }
 
     public void UndoAll()

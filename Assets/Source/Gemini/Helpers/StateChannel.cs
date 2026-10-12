@@ -16,9 +16,7 @@ public static class StateChannel
         }
     }
 
-    public static bool Suppressed { get; set; }
-
-    public static bool UserDriven => !InAgentCall && !Suppressed;
+    public static bool UserDriven => !InAgentCall;
 
     private static readonly List<string> _agentBatch = new List<string>();
     private static readonly List<string> _userQueue = new List<string>();
@@ -35,8 +33,6 @@ public static class StateChannel
             _agentBatch.Add(what);
             return;
         }
-
-        if (Suppressed) return;
 
         _userQueue.Add(what);
         while (_userQueue.Count > MaxUserQueue) _userQueue.RemoveAt(0);

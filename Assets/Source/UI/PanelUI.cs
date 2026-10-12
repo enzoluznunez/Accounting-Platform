@@ -79,16 +79,7 @@ public abstract class PanelUI : MonoBehaviour
         Grabbable grabbable = GetComponent<Grabbable>();
         if (grabbable == null) return;
 
-        TwoGrabRotateTransformer spin = GetComponent<TwoGrabRotateTransformer>();
-        if (spin == null)
-        {
-            spin = gameObject.AddComponent<TwoGrabRotateTransformer>();
-            spin.InjectOptionalConstraints(new TwoGrabRotateTransformer.TwoGrabRotateConstraints
-            {
-                MinAngle = new FloatConstraint(),
-                MaxAngle = new FloatConstraint()
-            });
-        }
+        TwoGrabRotateTransformer spin = GrabTransformers.EnsureYaw(gameObject);
 
         spin.InjectOptionalPivotTransform(EnsureGrabPivot());
         spin.InjectOptionalRotationAxis(TwoGrabRotateTransformer.Axis.Up);
@@ -290,24 +281,14 @@ public abstract class PanelUI : MonoBehaviour
     {
         if (border == null) return;
 
-        Transform existing = border.Find("PanelBack");
-        RectTransform rt;
-        if (existing != null)
-            rt = existing as RectTransform ?? existing.gameObject.AddComponent<RectTransform>();
-        else
-        {
-            GameObject obj = new GameObject("PanelBack", typeof(RectTransform));
-            rt = obj.GetComponent<RectTransform>();
-            rt.SetParent(border, false);
-        }
+        RectTransform rt = UILayout.EnsureChild(border, "PanelBack");
 
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = new Vector2(Style.SmallBorder, Style.SmallBorder);
         rt.offsetMax = new Vector2(-Style.SmallBorder, -Style.SmallBorder);
 
-        Image back = rt.GetComponent<Image>();
-        if (back == null) back = rt.gameObject.AddComponent<Image>();
+        Image back = UILayout.Ensure<Image>(rt.gameObject);
 
         RoundedSprite.Apply(back, Style.PanelInnerRadius);
         back.color = Style.Black;
@@ -378,16 +359,7 @@ public abstract class PanelUI : MonoBehaviour
 
     private static void EnsureBarBottomSquare(Transform bar, Color tint)
     {
-        Transform existing = bar.Find("TitleBarSquare");
-        RectTransform rt;
-        if (existing != null)
-            rt = existing as RectTransform ?? existing.gameObject.AddComponent<RectTransform>();
-        else
-        {
-            GameObject go = new GameObject("TitleBarSquare", typeof(RectTransform));
-            rt = go.GetComponent<RectTransform>();
-            rt.SetParent(bar, false);
-        }
+        RectTransform rt = UILayout.EnsureChild(bar, "TitleBarSquare");
 
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = new Vector2(1f, 0f);
@@ -396,12 +368,10 @@ public abstract class PanelUI : MonoBehaviour
         rt.offsetMax = new Vector2(0f, Style.PanelInnerRadius);
         rt.SetAsFirstSibling();
 
-        LayoutElement le = rt.GetComponent<LayoutElement>();
-        if (le == null) le = rt.gameObject.AddComponent<LayoutElement>();
+        LayoutElement le = UILayout.Ensure<LayoutElement>(rt.gameObject);
         le.ignoreLayout = true;
 
-        Image img = rt.GetComponent<Image>();
-        if (img == null) img = rt.gameObject.AddComponent<Image>();
+        Image img = UILayout.Ensure<Image>(rt.gameObject);
         img.color = tint;
         img.raycastTarget = false;
         ApplyFront(img);
@@ -475,8 +445,7 @@ public abstract class PanelUI : MonoBehaviour
         Transform spacer = bar.Find("Spacer");
         if (spacer == null) return null;
 
-        LayoutElement le = spacer.GetComponent<LayoutElement>();
-        if (le == null) le = spacer.gameObject.AddComponent<LayoutElement>();
+        LayoutElement le = UILayout.Ensure<LayoutElement>(spacer.gameObject);
         le.flexibleWidth = 1f;
         return le;
     }

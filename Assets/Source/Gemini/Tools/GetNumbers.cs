@@ -94,7 +94,7 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
         result["row"] = data.TitleAt(false, visRow);
         result["column"] = data.TitleAt(true, visCol);
 
-        if (TryValue(data, visRow, visCol, out double value)) result["value"] = Round(value);
+        if (TryCellValue(data, visRow, visCol, out double value)) result["value"] = Round(value);
         else {
             result["value"] = null;
             result["note"] = "That cell has no value.";
@@ -112,7 +112,7 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
             int visRow = downColumn ? v : line;
             int visCol = downColumn ? line : v;
             titles.Add(data.TitleAt(!downColumn, v));
-            values.Add(TryValue(data, visRow, visCol, out double value) ? Round(value) : null);
+            values.Add(TryCellValue(data, visRow, visCol, out double value) ? Round(value) : null);
         }
 
         result[downColumn ? "rows" : "columns"] = titles;
@@ -129,7 +129,7 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
 
             var line = new List<object>();
             for (int vc = colMin; vc <= colMax; vc++)
-                line.Add(TryValue(data, vr, vc, out double value) ? Round(value) : null);
+                line.Add(TryCellValue(data, vr, vc, out double value) ? Round(value) : null);
             grid.Add(line);
         }
 
@@ -140,19 +140,5 @@ public sealed class GetNumbers : AgenticTool<GetNumbers.Args> {
         result["columns"] = columnTitles;
         result["values"] = grid;
         result["note"] = "'values' is one list per row, in the same order as 'rows', each aligned to 'columns'.";
-    }
-
-    private static bool TryValue(DataSource data, int visRow, int visCol, out double value) {
-        value = 0d;
-
-        IReadOnlyList<int> rowOrder = data.RowOrder;
-        IReadOnlyList<int> colOrder = data.ColumnOrder;
-        int dataRow = visRow >= 0 && visRow < rowOrder.Count ? rowOrder[visRow] : -1;
-        int dataCol = visCol >= 0 && visCol < colOrder.Count ? colOrder[visCol] : -1;
-
-        if (dataRow < 0 || dataCol < 0 || !data.HasValue(dataRow, dataCol)) return false;
-
-        value = data.GetValue(dataRow, dataCol);
-        return true;
     }
 }

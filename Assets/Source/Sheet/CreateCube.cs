@@ -7,7 +7,6 @@ public class CreateCube : MonoBehaviour
     public int visCol = -1;
     public int dataRow = -1;
     public int dataCol = -1;
-    public float value;
 
     public CreateSheet Sheet { get; private set; }
 
@@ -28,9 +27,6 @@ public class CreateCube : MonoBehaviour
     public BoxCollider Collider => _collider;
 
     public bool IsVisible => _visible;
-
-    public Vector3 TopCenter =>
-        transform.position + transform.up * (transform.lossyScale.y * 0.5f);
 
     private static readonly Vector3[] Verts =
     {
@@ -85,13 +81,12 @@ public class CreateCube : MonoBehaviour
         }
     }
 
-    public void SetCell(int vRow, int vCol, int dRow, int dCol, float cellValue)
+    public void SetCell(int vRow, int vCol, int dRow, int dCol)
     {
         visRow = vRow;
         visCol = vCol;
         dataRow = dRow;
         dataCol = dCol;
-        value = cellValue;
     }
 
     public void SetBox(Vector3 localCenter, Vector3 size)

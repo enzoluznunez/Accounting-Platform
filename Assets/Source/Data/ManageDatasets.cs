@@ -102,13 +102,6 @@ public class ManageDatasets : MonoBehaviour
         SwitchDataset(_datasets.Count - 1);
     }
 
-    // A dataset the app knows of but has not read. It is listed straight away and
-    // costs nothing until it is opened.
-    public void AddCatalogEntry(string file, string label, int companies)
-    {
-        if (AddCatalogEntryQuietly(file, label, companies)) OnDatasetsChanged?.Invoke();
-    }
-
     // The rail is torn down and rebuilt on every change, so a whole index is
     // listed in one go and announced once rather than once per industry.
     public void AddCatalogEntries(IEnumerable<(string file, string label, int companies)> entries)

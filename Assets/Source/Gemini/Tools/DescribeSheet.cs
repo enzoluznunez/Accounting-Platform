@@ -30,7 +30,7 @@ public sealed class DescribeSheet : AgenticTool {
         int colMin = piece.colMin;
         int colMax = piece.colMax;
 
-        result["rows"] = Titles(data.RowOrder, data.RowTitles, rowMin, rowMax);
+        result["rows"] = Titles(data, false, rowMin, rowMax);
         if (rowMin == 0 && rowMax == mgr.RowCount - 1) NoteRefreshed(false);
         if (colMin == 0 && colMax == mgr.ColCount - 1) NoteRefreshed(true);
 
@@ -53,7 +53,7 @@ public sealed class DescribeSheet : AgenticTool {
                              "separated. Bar heights are comparable within a metric but not between metrics.";
         }
         else {
-            result["columns"] = Titles(data.ColumnOrder, data.ColumnTitles, colMin, colMax);
+            result["columns"] = Titles(data, true, colMin, colMax);
             result["colRange"] = new List<object> { colMin + 1, colMax + 1 };
         }
         if (!string.IsNullOrEmpty(data.RowAxisTitle)) result["rowCategory"] = data.RowAxisTitle;
@@ -87,7 +87,7 @@ public sealed class DescribeSheet : AgenticTool {
             var entry = new Dictionary<string, object> { { "kind", "strip" } };
             entry["direction"] = rec.isColumn ? "column" : "row";
             entry[rec.isColumn ? "column" : "row"] =
-                Title(data, rec.isColumn, rec.isColumn ? rec.dataCol : rec.dataRow);
+                data.TitleOfData(rec.isColumn, rec.isColumn ? rec.dataCol : rec.dataRow);
             if (rec.isColumn && data.IsGrouped(true))
                 entry["metric"] = data.GroupTitleOfData(true, rec.dataCol);
 
@@ -96,17 +96,9 @@ public sealed class DescribeSheet : AgenticTool {
         return list;
     }
 
-    private static string Title(DataSource data, bool columns, int dataIndex) {
-        IReadOnlyList<string> titles = columns ? data.ColumnTitles : data.RowTitles;
-        return dataIndex >= 0 && dataIndex < titles.Count ? titles[dataIndex] : null;
-    }
-
-    private static List<object> Titles(IReadOnlyList<int> order, IReadOnlyList<string> src, int min, int max) {
+    private static List<object> Titles(DataSource data, bool columns, int min, int max) {
         var titles = new List<object>();
-        for (int v = min; v <= max; v++) {
-            int idx = v >= 0 && v < order.Count ? order[v] : -1;
-            titles.Add(idx >= 0 && idx < src.Count ? src[idx] : "");
-        }
+        for (int v = min; v <= max; v++) titles.Add(data.TitleAt(columns, v) ?? "");
         return titles;
     }
 

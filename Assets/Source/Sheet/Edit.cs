@@ -49,19 +49,7 @@ public class Edit
     // so a press on the company list and a press on the metric list undo apart.
     public bool filterIsRow;
 
-    public static string KindName(EditKind kind)
-    {
-        switch (kind)
-        {
-            case EditKind.Move: return "move";
-            case EditKind.Rotate: return "rotate";
-            case EditKind.Scale: return "scale";
-            case EditKind.Sort: return "sort";
-            case EditKind.Filter: return "filter";
-            case EditKind.Profile: return "profile";
-            default: return "edit";
-        }
-    }
+    public static string KindName(EditKind kind) => kind.ToString().ToLowerInvariant();
 }
 
 public class EditList : List<Edit>

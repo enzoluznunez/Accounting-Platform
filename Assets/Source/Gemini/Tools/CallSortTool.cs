@@ -256,9 +256,7 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         }
 
         if (clampNote != null) result["note"] = clampNote;
-        List<int> moved = pre.GetRange(fromPos * size, size);
-        pre.RemoveRange(fromPos * size, size);
-        pre.InsertRange(toPos * size, moved);
+        DataSource.MoveGroupWithin(pre, fromPos, toPos, size);
         EchoOrder(data, isColumn, pre, result);
         result["undoable"] = true;
     }

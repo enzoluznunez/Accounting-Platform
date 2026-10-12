@@ -77,9 +77,7 @@ public class ManageSheets : MonoBehaviour
     public CreateSheet Sheet => _sheets.Count > 0 ? _sheets[0] : null;
     public int RowCount => _rowCount;
     public int ColCount => _colCount;
-    public float CellSize => _cellSize;
     public float Height => maximumHeight;
-    public float BaseY => _baseY;
     public bool IsBuilt => _sheets.Count > 0;
 
     private bool _recenterHooked;
@@ -277,7 +275,6 @@ public class ManageSheets : MonoBehaviour
 
         CreateSheet s = go.GetComponent<CreateSheet>();
         if (s == null) s = go.AddComponent<CreateSheet>();
-        s.MarkDetached();
         s.sheetId = -1;
         s.SetGrabbable(false);
         s.SetPickable(false);
@@ -383,22 +380,6 @@ public class ManageSheets : MonoBehaviour
                     break;
 
             }
-        }
-    }
-
-    public void CubesInLine(bool columns, int visLine, List<CreateCube> into)
-    {
-        if (into == null) return;
-        for (int i = 0; i < _sheets.Count; i++)
-        {
-            CreateSheet s = _sheets[i];
-            bool contains = columns
-                ? visLine >= s.colMin && visLine <= s.colMax
-                : visLine >= s.rowMin && visLine <= s.rowMax;
-            if (!contains) continue;
-
-            IReadOnlyList<CreateCube> cubes = s.CubesInLine(columns, visLine);
-            for (int j = 0; j < cubes.Count; j++) into.Add(cubes[j]);
         }
     }
 
@@ -772,11 +753,6 @@ public class ManageSheets : MonoBehaviour
         scale = t.localScale;
     }
 
-    public Vector3 CommittedPositionOf(Transform target)
-    {
-        return _transformGlides.TryGetValue(target, out TransformGlide g) ? g.toPos : target.position;
-    }
-
     public void CompleteTransformMotion(Transform target)
     {
         if (target == null || !_transformGlides.TryGetValue(target, out TransformGlide g)) return;
@@ -950,9 +926,7 @@ public class ManageSheets : MonoBehaviour
 
     public void CompletePieceMotion(CreateSheet piece)
     {
-        if (piece == null || !_pieceGlides.TryGetValue(piece, out GlideState g)) return;
-        if (g.routine != null) StopCoroutine(g.routine);
-        _pieceGlides.Remove(piece);
+        if (!StopGlide(piece, out GlideState g)) return;
 
         Transform t = piece.transform;
         t.localPosition = g.toPos;
@@ -1008,10 +982,7 @@ public class ManageSheets : MonoBehaviour
 
     public void HaltPieceMotion(CreateSheet piece)
     {
-        if (piece == null || !_pieceGlides.TryGetValue(piece, out GlideState g)) return;
-        if (g.routine != null) StopCoroutine(g.routine);
-        _pieceGlides.Remove(piece);
-        AmendPoseRecord(piece);
+        if (StopGlide(piece, out _)) AmendPoseRecord(piece);
     }
 
     private void AmendPoseRecord(CreateSheet piece)
@@ -1042,11 +1013,17 @@ public class ManageSheets : MonoBehaviour
         }
     }
 
-    public void CancelPieceMotion(CreateSheet piece)
+    public void CancelPieceMotion(CreateSheet piece) => StopGlide(piece, out _);
+
+    // Drops the piece's glide even when the piece has been destroyed, so no entry
+    // outlives it; returns true only for a live piece the caller can still touch.
+    private bool StopGlide(CreateSheet piece, out GlideState g)
     {
-        if (piece == null || !_pieceGlides.TryGetValue(piece, out GlideState g)) return;
+        g = default;
+        if (ReferenceEquals(piece, null) || !_pieceGlides.TryGetValue(piece, out g)) return false;
         if (g.routine != null) StopCoroutine(g.routine);
         _pieceGlides.Remove(piece);
+        return piece != null;
     }
 
     public void AnimatePieceFrom(CreateSheet piece, Vector3 prePos, Quaternion preRot, Vector3 preScale)
@@ -1082,8 +1059,7 @@ public class ManageSheets : MonoBehaviour
         while (t < duration)
         {
             yield return null;
-            if (piece == null) yield break;
-            if (piece.IsGrabbed) { _pieceGlides.Remove(piece); yield break; }
+            if (piece == null || piece.IsGrabbed) { _pieceGlides.Remove(piece); yield break; }
 
             t += Time.deltaTime;
             float k = Mathf.Clamp01(t / duration);
@@ -1159,9 +1135,6 @@ public class ManageSheets : MonoBehaviour
         return true;
     }
 
-    public void SetLineTint(CreateSheet target, int axis, int min, int max) =>
-        SetLineTint(target, axis, min, max, Style.PreviewSwell);
-
     public void SetLineTint(CreateSheet target, int axis, int min, int max, float swell)
     {
         for (int i = 0; i < _sheets.Count; i++)
@@ -1221,6 +1194,8 @@ public class ManageSheets : MonoBehaviour
     private void ClearSheets()
     {
         if (_reflow != null) { StopCoroutine(_reflow); _reflow = null; }
+        foreach (GlideState g in _pieceGlides.Values)
+            if (g.routine != null) StopCoroutine(g.routine);
         _pieceGlides.Clear();
         for (int i = 0; i < _sheets.Count; i++)
             if (_sheets[i] != null) Destroy(_sheets[i].gameObject);

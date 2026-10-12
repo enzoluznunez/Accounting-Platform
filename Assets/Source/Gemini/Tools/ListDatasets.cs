@@ -28,12 +28,13 @@ public sealed class ListDatasets : AgenticTool {
             for (int i = datasets.DatasetCount - 1; i >= 0; i--) {
                 var dataset = datasets.Datasets[i];
                 bool active = i == datasets.ActiveIndex;
+                string name = string.IsNullOrEmpty(dataset.label) ? "dataset" : dataset.label;
 
                 // An industry that has not been read yet has no sheet and no
                 // edits; saying so is the whole of what there is to report.
                 if (!dataset.loaded) {
                     list.Add(new Dictionary<string, object> {
-                        { "name", string.IsNullOrEmpty(dataset.label) ? "dataset" : dataset.label },
+                        { "name", name },
                         { "active", false },
                         { "read", false },
                         { "companies", dataset.companies }
@@ -42,7 +43,7 @@ public sealed class ListDatasets : AgenticTool {
                 }
 
                 list.Add(new Dictionary<string, object> {
-                    { "name", string.IsNullOrEmpty(dataset.label) ? "dataset" : dataset.label },
+                    { "name", name },
                     { "active", active },
                     { "read", true },
                     { "edits", DescribeStack(dataset.Edits, dataset.source, active) }
@@ -154,17 +155,10 @@ public sealed class ListDatasets : AgenticTool {
         return names;
     }
 
-    private static string DataTitle(DataSource data, bool columns, int dataIndex)
-    {
-        if (data == null) return null;
-
-        // On a grouped axis the metric is what the model addresses, so edits read
-        // back in the same words they were asked for.
-        if (data.IsGrouped(columns)) return data.GroupTitleOfData(columns, dataIndex);
-
-        IReadOnlyList<string> titles = columns ? data.ColumnTitles : data.RowTitles;
-        return dataIndex >= 0 && dataIndex < titles.Count ? titles[dataIndex] : null;
-    }
+    // On a grouped axis the metric is what the model addresses, so edits read
+    // back in the same words they were asked for.
+    private static string DataTitle(DataSource data, bool columns, int dataIndex) =>
+        data?.GroupTitleOfData(columns, dataIndex);
 
 }
 

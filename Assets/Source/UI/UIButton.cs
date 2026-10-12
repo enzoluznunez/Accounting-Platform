@@ -58,13 +58,13 @@ public static class UIButton
         if (h == null || h.Root == null) return null;
         if (h.Back != null) return h.Back;
 
-        RectTransform rt = EnsureChild(h.Root.transform, "ButtonBack");
+        RectTransform rt = UILayout.EnsureChild(h.Root.transform, "ButtonBack");
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
 
-        Image back = Ensure<Image>(rt.gameObject);
+        Image back = UILayout.Ensure<Image>(rt.gameObject);
         RoundedSprite.Apply(back, h.Radius);
         back.color = Style.Black;
         back.raycastTarget = false;
@@ -104,25 +104,25 @@ public static class UIButton
         if (h == null || h.Root == null) return null;
         if (h.CheckFrame != null) return h.CheckFrame;
 
-        RectTransform rt = EnsureChild(h.Root.transform, "Check");
+        RectTransform rt = UILayout.EnsureChild(h.Root.transform, "Check");
         rt.anchorMin = new Vector2(1f, 0.5f);
         rt.anchorMax = new Vector2(1f, 0.5f);
         rt.pivot = new Vector2(1f, 0.5f);
         rt.sizeDelta = new Vector2(side, side);
         rt.anchoredPosition = new Vector2(-Style.ButtonTextPad, 0f);
 
-        Image frame = Ensure<Image>(rt.gameObject);
+        Image frame = UILayout.Ensure<Image>(rt.gameObject);
         RoundedSprite.Apply(frame, 0f);
         frame.color = Style.Black;
         frame.raycastTarget = false;
         h.CheckFrame = frame;
 
-        RectTransform fillRt = EnsureChild(rt, "Fill");
+        RectTransform fillRt = UILayout.EnsureChild(rt, "Fill");
         fillRt.anchorMin = Vector2.zero;
         fillRt.anchorMax = Vector2.one;
         fillRt.offsetMin = new Vector2(Style.SmallBorder, Style.SmallBorder);
         fillRt.offsetMax = new Vector2(-Style.SmallBorder, -Style.SmallBorder);
-        Image fill = Ensure<Image>(fillRt.gameObject);
+        Image fill = UILayout.Ensure<Image>(fillRt.gameObject);
         RoundedSprite.Apply(fill, 0f);
         fill.raycastTarget = false;
         h.CheckFill = fill;
@@ -183,32 +183,32 @@ public static class UIButton
         GameObject root = h.Root;
         h.Radius = radius;
 
-        Image frame = Ensure<Image>(root);
+        Image frame = UILayout.Ensure<Image>(root);
         RoundedSprite.Apply(frame, radius);
         frame.color = Style.Black;
         h.Frame = frame;
 
-        Button button = Ensure<Button>(root);
+        Button button = UILayout.Ensure<Button>(root);
         button.transition = Selectable.Transition.None;
         button.targetGraphic = frame;
         h.Button = button;
 
-        RectTransform innerRt = EnsureChild(root.transform, "Inner");
+        RectTransform innerRt = UILayout.EnsureChild(root.transform, "Inner");
         innerRt.anchorMin = Vector2.zero;
         innerRt.anchorMax = Vector2.one;
         innerRt.offsetMin = new Vector2(Style.SmallBorder, Style.SmallBorder);
         innerRt.offsetMax = new Vector2(-Style.SmallBorder, -Style.SmallBorder);
-        Image inner = Ensure<Image>(innerRt.gameObject);
+        Image inner = UILayout.Ensure<Image>(innerRt.gameObject);
         RoundedSprite.Apply(inner, Style.InnerRadius(radius));
         inner.raycastTarget = false;
         h.Inner = inner;
 
-        RectTransform textRt = EnsureChild(root.transform, "Text");
+        RectTransform textRt = UILayout.EnsureChild(root.transform, "Text");
         textRt.anchorMin = Vector2.zero;
         textRt.anchorMax = Vector2.one;
         textRt.offsetMin = new Vector2(padLeft, 0f);
         textRt.offsetMax = new Vector2(-padRight, 0f);
-        TextMeshProUGUI text = Ensure<TextMeshProUGUI>(textRt.gameObject);
+        TextMeshProUGUI text = UILayout.Ensure<TextMeshProUGUI>(textRt.gameObject);
         if (label != null) text.text = label;
         Style.ApplyBody(text);
         text.alignment = alignment;
@@ -218,27 +218,12 @@ public static class UIButton
         text.overflowMode = TextOverflowModes.Ellipsis;
         h.Text = text;
 
-        PointerHighlight hl = Ensure<PointerHighlight>(root);
+        PointerHighlight hl = UILayout.Ensure<PointerHighlight>(root);
         hl.SetLiftTarget(root.transform);
         h.Highlight = hl;
 
         SetStateTarget(h, inner, Style.White, Style.Black, Style.Black, Style.White);
 
         if (root.transform.Find("ButtonBack") != null) AddBack(h);
-    }
-
-    private static T Ensure<T>(GameObject go) where T : Component
-    {
-        T c = go.GetComponent<T>();
-        return c != null ? c : go.AddComponent<T>();
-    }
-
-    private static RectTransform EnsureChild(Transform parent, string name)
-    {
-        Transform existing = parent.Find(name);
-        if (existing != null) return existing as RectTransform ?? existing.gameObject.AddComponent<RectTransform>();
-        GameObject child = new GameObject(name);
-        child.transform.SetParent(parent, false);
-        return child.AddComponent<RectTransform>();
     }
 }

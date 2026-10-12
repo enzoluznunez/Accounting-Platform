@@ -64,17 +64,6 @@ public abstract class DataSource : MonoBehaviour
         string title = data != null ? data.TitleAt(columns, visIndex) : null;
         return string.IsNullOrEmpty(title) ? $"{(columns ? "column" : "row")} {visIndex + 1}" : title;
     }
-    public static List<string> TitlesFor(DataSource data, bool columns, IReadOnlyList<int> dataIndexes)
-    {
-        IReadOnlyList<string> titles = columns ? data.ColumnTitles : data.RowTitles;
-        var list = new List<string>(dataIndexes.Count);
-        for (int i = 0; i < dataIndexes.Count; i++)
-        {
-            int d = dataIndexes[i];
-            list.Add(d >= 0 && d < titles.Count ? titles[d] : null);
-        }
-        return list;
-    }
 
     // -1 when the line is not on the sheet, which now covers a hidden metric as
     // well as an index the data never had.
@@ -259,12 +248,6 @@ public abstract class DataSource : MonoBehaviour
         return size > 1 ? visIndex / size : visIndex;
     }
 
-    public int SeriesOf(bool columns, int visIndex)
-    {
-        int size = GroupSize(columns);
-        return size > 1 ? visIndex % size : 0;
-    }
-
     public void GroupSpan(bool columns, int group, out int lo, out int hi)
     {
         int size = GroupSize(columns);
@@ -284,12 +267,17 @@ public abstract class DataSource : MonoBehaviour
         return GroupTitleOfData(columns, order[vis]) ?? TitleAt(columns, vis);
     }
 
-    public string GroupTitleOfData(bool columns, int dataIndex)
+    // A line's own title by data index, wherever it sits on the sheet.
+    public string TitleOfData(bool columns, int dataIndex)
     {
         IReadOnlyList<string> titles = columns ? _columnTitles : _rowTitles;
+        return dataIndex >= 0 && dataIndex < titles.Count ? titles[dataIndex] : null;
+    }
+
+    public string GroupTitleOfData(bool columns, int dataIndex)
+    {
         int size = GroupSize(columns);
-        if (size <= 1)
-            return dataIndex >= 0 && dataIndex < titles.Count ? titles[dataIndex] : null;
+        if (size <= 1) return TitleOfData(columns, dataIndex);
 
         int g = dataIndex / size;
         return g >= 0 && g < _groupTitles.Count ? _groupTitles[g] : null;
@@ -594,19 +582,20 @@ public abstract class DataSource : MonoBehaviour
 
     // Positions are line indexes on both axes; on a grouped axis the whole group
     // holding 'fromPos' travels to the group slot holding 'toPos'.
-    public void MoveColumn(int fromPos, int toPos)
+    // Both return whether the order actually changed.
+    public bool MoveColumn(int fromPos, int toPos)
     {
         List<int> arrangement = new List<int>(_visibleColumns);
         bool moved = _columnGroupSize > 1
             ? MoveGroupWithin(arrangement, fromPos / _columnGroupSize, toPos / _columnGroupSize, _columnGroupSize)
             : MoveWithin(arrangement, fromPos, toPos);
-        if (moved) SetColumnOrder(arrangement, SortMode.Manual);
+        return moved && SetColumnOrder(arrangement, SortMode.Manual);
     }
 
-    public void MoveRow(int fromPos, int toPos)
+    public bool MoveRow(int fromPos, int toPos)
     {
         List<int> arrangement = new List<int>(_visibleRows);
-        if (MoveWithin(arrangement, fromPos, toPos)) SetRowOrder(arrangement, SortMode.Manual);
+        return MoveWithin(arrangement, fromPos, toPos) && SetRowOrder(arrangement, SortMode.Manual);
     }
 
     private bool SpliceVisibleRows(IReadOnlyList<int> order)
@@ -634,7 +623,8 @@ public abstract class DataSource : MonoBehaviour
         return true;
     }
 
-    private static bool MoveGroupWithin(List<int> order, int fromGroup, int toGroup, int groupSize)
+    // Moves the block of 'groupSize' entries at 'fromGroup' to block slot 'toGroup', in place.
+    public static bool MoveGroupWithin(List<int> order, int fromGroup, int toGroup, int groupSize)
     {
         int groups = order.Count / groupSize;
         if (groups <= 0 || fromGroup < 0 || fromGroup >= groups) return false;

@@ -41,7 +41,7 @@ public sealed class CallRotateTool : AgenticTool<CallRotateTool.Args> {
         Apply(mgr, sheet, mode, args, result);
     }
 
-    private static bool Apply(ManageSheets mgr, CreateSheet sheet, string mode, Args args, Dictionary<string, object> step) {
+    private static void Apply(ManageSheets mgr, CreateSheet sheet, string mode, Args args, Dictionary<string, object> step) {
         switch (mode) {
             case "by": By(mgr, sheet, args, step); break;
             case "face": Face(mgr, sheet, step); break;
@@ -49,9 +49,8 @@ public sealed class CallRotateTool : AgenticTool<CallRotateTool.Args> {
                 ApplyPieceTransform(mgr, sheet, t => t.localRotation = Quaternion.identity);
                 step["rotated"] = "reset";
                 break;
-            default: step["error"] = $"Unknown mode '{mode}'. Use 'by', 'face', or 'reset'."; return false;
+            default: step["error"] = $"Unknown mode '{mode}'. Use 'by', 'face', or 'reset'."; break;
         }
-        return !IsRefusal(step);
     }
 
     private static void By(ManageSheets mgr, CreateSheet sheet, Args args, Dictionary<string, object> result) {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Google.GenAI.Types;
@@ -21,11 +22,14 @@ public static class FinancialsApi {
     public static string ApiKey = "";
     public const string KeyHeader = "X-Api-Key";
 
+    // 'path' starts with a slash, such as "/industries".
+    public static string Url(string path) => BaseUrl.TrimEnd('/') + path;
+
     // Only requests to the API carry the key: a sheet can also be a file in
     // StreamingAssets or another site's URL, and neither should ever see it.
     public static bool IsApi(string url) =>
         !string.IsNullOrEmpty(url) &&
-        url.StartsWith(BaseUrl.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase);
+        url.StartsWith(Url("/"), StringComparison.OrdinalIgnoreCase);
 
     public static void Authorize(UnityWebRequest request) {
         if (!string.IsNullOrEmpty(ApiKey) && IsApi(request.url)) request.SetRequestHeader(KeyHeader, ApiKey);
@@ -42,7 +46,7 @@ public static class FinancialsApi {
     }
 
     public static async Task<string> Get(string path) {
-        using var request = new HttpRequestMessage(HttpMethod.Get, BaseUrl.TrimEnd('/') + path);
+        using var request = new HttpRequestMessage(HttpMethod.Get, Url(path));
         if (!string.IsNullOrEmpty(ApiKey)) request.Headers.Add(KeyHeader, ApiKey);
         using HttpResponseMessage response = await http.SendAsync(request).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -180,11 +184,20 @@ public sealed class OpenIndustrySheet : AgenticTool {
     };
 
     // The download happens off the main thread in Execute; Run, on the main
-    // thread, only hands the finished sheet to the scene.
-    private string csv;
-    private string label;
+    // thread, only hands the finished sheet to the scene. The tool is one shared
+    // object and Gemini can ask for two industries in one breath, so each
+    // download is keyed to its own call's arguments rather than held in a field
+    // the other call would overwrite.
+    private sealed class Download {
+        public string csv;
+        public string label;
+    }
+
+    private static readonly ConditionalWeakTable<Dictionary<string, object>, Download> downloads =
+        new ConditionalWeakTable<Dictionary<string, object>, Download>();
 
     protected override async Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) {
+        args ??= new Dictionary<string, object>();
         var bound = ToolArguments.Bind(typeof(Args), args, out string bindError) as Args;
         if (bound == null) return new Dictionary<string, object> { { "error", bindError } };
 
@@ -230,7 +243,7 @@ public sealed class OpenIndustrySheet : AgenticTool {
         if (!string.IsNullOrWhiteSpace(bound.match) && bound.match != "any" && bound.match != "all")
             return Fail($"'{bound.match}' is not a way to match; use 'any' or 'all'.");
 
-        label = named ? bound.industry.Trim()
+        string label = named ? bound.industry.Trim()
               : bound.sic.HasValue ? $"SIC {bound.sic.Value}"
               : "All Industries";
 
@@ -250,6 +263,7 @@ public sealed class OpenIndustrySheet : AgenticTool {
         // parameter would otherwise follow the '?' with a stray separator.
         query = query.Replace("?&", "?");
 
+        string csv;
         try {
             csv = await FinancialsApi.Get(query).ConfigureAwait(false);
         }
@@ -263,7 +277,13 @@ public sealed class OpenIndustrySheet : AgenticTool {
             return Fail(why);
         }
 
-        return await base.Execute(args).ConfigureAwait(false);
+        downloads.Add(args, new Download { csv = csv, label = label });
+        try {
+            return await base.Execute(args).ConfigureAwait(false);
+        }
+        finally {
+            downloads.Remove(args);
+        }
     }
 
     private static Dictionary<string, object> Fail(string why) =>
@@ -293,26 +313,26 @@ public sealed class OpenIndustrySheet : AgenticTool {
     }
 
     protected override void Run(Dictionary<string, object> args, Dictionary<string, object> result) {
-        // The tool is a long-lived singleton, so the download is handed over and
-        // let go of here rather than pinned until the next call replaces it.
-        string sheet = csv, name = label;
-        csv = null;
-        label = null;
+        if (!downloads.TryGetValue(args, out Download download)) {
+            result["error"] = "The sheet was not downloaded.";
+            return;
+        }
 
         var datasets = Scene.Datasets;
         if (datasets == null) { result["error"] = "No dataset manager in the scene."; return; }
 
-        datasets.AddDataset(sheet, name);
+        ManageDatasets.Dataset added = datasets.AddDataset(download.csv, download.label);
 
         // Inline CSV parses synchronously and a successful load switches to the
-        // new dataset, so the parser's own shape is ready to report.
+        // new dataset, so the parser's own shape is ready to report. The name it
+        // was given can differ from the one asked for when that one is taken.
         DataSource data = datasets.Active;
-        if (data == null || !data.IsLoaded || datasets.ActiveDataset.label != name) {
+        if (added == null || datasets.ActiveDataset != added || data == null || !data.IsLoaded) {
             result["error"] = "The sheet came back but could not be read as a dataset.";
             return;
         }
 
-        result["opened"] = name;
+        result["opened"] = added.label;
         result["companies"] = data.RowOrder.Count;
         result["metrics"] = data.GroupCount(true);
         result["years"] = new List<object>(data.SeriesTitles);

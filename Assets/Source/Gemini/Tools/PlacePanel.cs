@@ -61,11 +61,10 @@ public sealed class PlacePanel : AgenticTool<PlacePanel.Args> {
         Vector3 prePos = pt.position;
         Quaternion preRot = pt.rotation;
 
-        switch (args.action.Trim().ToLowerInvariant()) {
+        switch (args.action) {
             case "move": Move(panel, args, result); break;
             case "rotate": Rotate(panel, args, result); break;
             case "face": Face(panel, result); break;
-            default: result["error"] = $"Unknown action '{args.action}'."; return;
         }
 
         if (mgr != null) mgr.GlideTransformFrom(pt, prePos, preRot);
@@ -92,7 +91,7 @@ public sealed class PlacePanel : AgenticTool<PlacePanel.Args> {
         if (limited)
             result["note"] = "The panel was kept within the user's reach and moved less than asked.";
 
-        StateChannel.Record("Panel", $"moved the tool panel {actual:0.00}m {direction}");
+        StateChannel.Record($"moved the tool panel {actual:0.00}m {direction}");
     }
 
     private static void Rotate(PanelUI panel, Args args, Dictionary<string, object> result) {
@@ -109,7 +108,7 @@ public sealed class PlacePanel : AgenticTool<PlacePanel.Args> {
 
         result["rotated"] = direction;
         result["degrees"] = Math.Round(degrees, 1);
-        StateChannel.Record("Panel", $"turned the tool panel {degrees:0}° {direction}");
+        StateChannel.Record($"turned the tool panel {degrees:0}° {direction}");
     }
 
     private static void Face(PanelUI panel, Dictionary<string, object> result) {
@@ -117,16 +116,15 @@ public sealed class PlacePanel : AgenticTool<PlacePanel.Args> {
         if (cam == null) { result["error"] = "The user's viewpoint could not be found."; return; }
 
         Transform t = panel.transform;
-        Vector3 face = t.position - cam.position;
-        face.y = 0f;
-        if (face.sqrMagnitude < 1e-6f) {
+        Vector3 face = CameraRig.Flatten(t.position - cam.position, Vector3.zero);
+        if (face == Vector3.zero) {
             result["error"] = "The panel is too close to the user to square it up; move it first.";
             return;
         }
 
-        t.rotation = Quaternion.LookRotation(face.normalized);
+        t.rotation = Quaternion.LookRotation(face);
         result["faced"] = true;
-        StateChannel.Record("Panel", "turned the tool panel to face the user");
+        StateChannel.Record("turned the tool panel to face the user");
     }
 
 }

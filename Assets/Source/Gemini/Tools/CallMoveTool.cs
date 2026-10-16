@@ -7,7 +7,6 @@ public sealed class CallMoveTool : AgenticTool<CallMoveTool.Args> {
     private const float DefaultDistance = 0.15f;
     private const float MinDistance = 0.001f;
     private const float MaxDistance = 100f;
-    private const float GapCells = 0.5f;
 
     public class Args {
         [Doc("Which way to slide the sheet, from the user's point of view; 'forward' is away from them.")]
@@ -33,8 +32,7 @@ public sealed class CallMoveTool : AgenticTool<CallMoveTool.Args> {
         var manager = Scene.Sheets;
         if (manager == null || !manager.IsBuilt) { result["error"] = "The sheet is not ready to move."; return; }
 
-        string dir = args.direction?.Trim().ToLowerInvariant();
-        if (!TryWorldDirection(dir, out Vector3 dirVec)) {
+        if (!TryWorldDirection(args.direction, out Vector3 dirVec)) {
             result["error"] = $"Unknown direction '{args.direction}'. Use left, right, forward, back, up, down, " +
                               "or a diagonal such as forward-left.";
             return;
@@ -44,7 +42,7 @@ public sealed class CallMoveTool : AgenticTool<CallMoveTool.Args> {
 
         float asked = args.distance ?? DefaultDistance;
         float distance = Mathf.Clamp(asked, MinDistance, MaxDistance);
-        Slide(mgr, sheet, dir, dirVec * distance, result);
+        Slide(mgr, sheet, args.direction, dirVec * distance, result);
         result["requestedMeters"] = Round(asked);
         if (distance != asked)
             result["note"] = $"The distance was limited to the {MinDistance} to {MaxDistance} meter range; {distance} m was used.";

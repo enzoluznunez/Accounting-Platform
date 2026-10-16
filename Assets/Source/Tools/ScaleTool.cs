@@ -20,12 +20,7 @@ public class ScaleTool : GrabTool
         return scale;
     }
 
-    private static TransformerUtils.ConstrainedAxis Pin(float value) =>
-        new TransformerUtils.ConstrainedAxis
-        {
-            ConstrainAxis = true,
-            AxisRange = new TransformerUtils.FloatRange { Min = value, Max = value }
-        };
+    private static TransformerUtils.ConstrainedAxis Pin(float value) => Range(value, value);
 
     private static TransformerUtils.ConstrainedAxis Range(float min, float max) =>
         new TransformerUtils.ConstrainedAxis

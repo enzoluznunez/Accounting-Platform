@@ -34,6 +34,15 @@ public static class UILayout
         return child.AddComponent<RectTransform>();
     }
 
+    // Stretches 'rt' over its parent, 'inset' in from every edge.
+    public static void Fill(RectTransform rt, float inset = 0f)
+    {
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = new Vector2(inset, inset);
+        rt.offsetMax = new Vector2(-inset, -inset);
+    }
+
     public static LayoutElement FixedHeight(GameObject go, float height)
     {
         LayoutElement le = Ensure<LayoutElement>(go);

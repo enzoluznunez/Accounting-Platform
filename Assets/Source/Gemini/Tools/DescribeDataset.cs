@@ -47,7 +47,7 @@ public sealed class DescribeDataset : AgenticTool<DescribeDataset.Args> {
 
         int from = Math.Max(1, args.fromLine ?? 1);
 
-        string current = ActiveDatasetLabel();
+        string current = Scene.DatasetLabel;
         if (from > 1 && lastPagedLabel != null && !string.Equals(lastPagedLabel, current)) {
             Refuse(result, "continuation from a different dataset",
                 $"Your last read came from {lastPagedLabel}, but {current} is open now. " +

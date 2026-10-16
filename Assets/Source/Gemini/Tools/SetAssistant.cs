@@ -21,10 +21,8 @@ public sealed class SetAssistant : AgenticTool<SetAssistant.Args> {
         var watch = Scene.Assistant;
         if (watch == null) { result["error"] = "Watch not found in scene."; return; }
 
-        string state = args.state.Trim().ToLowerInvariant();
-
         bool active;
-        switch (state) {
+        switch (args.state) {
             case "on": active = true; break;
             case "off": active = false; break;
             default: active = !watch.IsGeminiActive; break;

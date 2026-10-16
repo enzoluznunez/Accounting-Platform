@@ -175,10 +175,8 @@ public class ManageSheets : MonoBehaviour
 
         RefitSpan(data);
 
-        bool skipReflow = _skipReflowOnce;
-        _skipReflowOnce = false;
         List<Dictionary<int, float>[]> lineSnapshot =
-            !skipReflow && _sheets.Count > 0 ? SnapshotLineCoords() : null;
+            !_skipReflow && _sheets.Count > 0 ? SnapshotLineCoords() : null;
 
         if (_sheets.Count > 0 && !CoversWholeField(maxRow, maxCol))
         {
@@ -267,14 +265,8 @@ public class ManageSheets : MonoBehaviour
 
     private CreateSheet CreateDetachedPiece(string label)
     {
-        EnsureRoot();
-
-        GameObject go = sheetPrefab != null ? Instantiate(sheetPrefab, _root) : new GameObject(label);
-        if (go.transform.parent != _root) go.transform.SetParent(_root, false);
-        go.name = label;
-
-        CreateSheet s = go.GetComponent<CreateSheet>();
-        if (s == null) s = go.AddComponent<CreateSheet>();
+        CreateSheet s = SpawnPiece(label);
+        s.gameObject.name = label;
         s.sheetId = -1;
         s.SetGrabbable(false);
         s.SetPickable(false);
@@ -333,7 +325,7 @@ public class ManageSheets : MonoBehaviour
             case EditKind.Move:
             case EditKind.Rotate:
             case EditKind.Scale:
-                Vector3 preScale = e.move.preScale.sqrMagnitude > 1e-6f ? e.move.preScale : Vector3.one;
+                Vector3 preScale = OrOne(e.move.preScale);
                 return RestoreSheetPose(e.move.sheetId, e.move.prePos, e.move.preRot, preScale)
                     ? UndoResult.Applied : UndoResult.Stale;
 
@@ -348,10 +340,8 @@ public class ManageSheets : MonoBehaviour
 
             case EditKind.Sort:
                 if (_bound == null) return UndoResult.Unreachable;
-                SuppressNextReflow();
-                bool reordered = e.reorderIsColumn
-                    ? _bound.SetColumnOrder(e.reorderPreOrder, e.reorderPreMode)
-                    : _bound.SetRowOrder(e.reorderPreOrder, e.reorderPreMode);
+                bool reordered = false;
+                WithoutReflow(() => reordered = _bound.SetOrder(e.reorderIsColumn, e.reorderPreOrder));
                 return reordered ? UndoResult.Applied : UndoResult.Stale;
         }
 
@@ -360,7 +350,7 @@ public class ManageSheets : MonoBehaviour
 
     public void ReplayEdits(IReadOnlyList<Edit> edits)
     {
-        if (edits == null || _bound == null) return;
+        if (_bound == null) return;
 
         for (int i = 0; i < edits.Count; i++)
         {
@@ -370,7 +360,7 @@ public class ManageSheets : MonoBehaviour
                 case EditKind.Move:
                 case EditKind.Rotate:
                 case EditKind.Scale:
-                    Vector3 scale = e.move.postScale.sqrMagnitude > 1e-6f ? e.move.postScale : Vector3.one;
+                    Vector3 scale = OrOne(e.move.postScale);
                     RestoreSheetPose(e.move.sheetId, e.move.postPos, e.move.postRot, scale);
                     break;
 
@@ -381,6 +371,10 @@ public class ManageSheets : MonoBehaviour
 
             }
         }
+
+        // Binding the dataset cleared any strip, so the newest Profile edit,
+        // which is what the timeline says should stand, is raised again.
+        ShowNewestProjection(edits, false);
     }
 
     public bool PushProjection(ProjectionRecord rec, EditKind kind)
@@ -393,10 +387,11 @@ public class ManageSheets : MonoBehaviour
         return true;
     }
 
-    public void SyncProjectionToStack(bool animateNew = false)
-    {
-        EditList edits = ManageDatasets.ActiveEdits;
+    public void SyncProjectionToStack(bool animateNew = false) =>
+        ShowNewestProjection(ManageDatasets.ActiveEdits, animateNew);
 
+    private void ShowNewestProjection(IReadOnlyList<Edit> edits, bool animateNew)
+    {
         for (int i = edits.Count - 1; i >= 0; i--)
         {
             Edit e = edits[i];
@@ -461,7 +456,7 @@ public class ManageSheets : MonoBehaviour
 
     private void StartProjectionRise(float lift)
     {
-        if (_projectionRiseRoutine != null) { StopCoroutine(_projectionRiseRoutine); _projectionRiseRoutine = null; }
+        StopProjectionRise();
         _projectionRise = 0f;
         if (!isActiveAndEnabled || ActiveMotionSpeed <= 0f || AgentInstant) return;
 
@@ -491,7 +486,7 @@ public class ManageSheets : MonoBehaviour
     {
         if (!_hasProjection) return;
 
-        if (_projectionRiseRoutine != null) { StopCoroutine(_projectionRiseRoutine); _projectionRiseRoutine = null; }
+        StopProjectionRise();
         _projectionRise = 0f;
         if (_projection.view != null) Destroy(_projection.view.gameObject);
         _projection = default;
@@ -643,7 +638,7 @@ public class ManageSheets : MonoBehaviour
         for (int i = 0; i < _sheets.Count; i++) _sheets[i].SetGrabbable(on);
     }
 
-    private Func<CreateSheet, Oculus.Interaction.ITransformer> _twoGrabFor;
+    private Func<CreateSheet, ITransformer> _twoGrabFor;
 
     public void SetOneGrab()
     {
@@ -658,7 +653,7 @@ public class ManageSheets : MonoBehaviour
             if (_sheets[i] != null) Debug.Log($"[Grab]   {_sheets[i].name} {_sheets[i].DescribeGrab()}");
     }
 
-    public void SetTwoGrab(Func<CreateSheet, Oculus.Interaction.ITransformer> transformerFor)
+    public void SetTwoGrab(Func<CreateSheet, ITransformer> transformerFor)
     {
         if (transformerFor == null) return;
 
@@ -672,7 +667,7 @@ public class ManageSheets : MonoBehaviour
         ApplyTwoGrab(sheet, _twoGrabFor);
     }
 
-    private static void ApplyTwoGrab(CreateSheet sheet, Func<CreateSheet, Oculus.Interaction.ITransformer> transformerFor)
+    private static void ApplyTwoGrab(CreateSheet sheet, Func<CreateSheet, ITransformer> transformerFor)
     {
         if (sheet == null) return;
 
@@ -717,7 +712,7 @@ public class ManageSheets : MonoBehaviour
 
     private Coroutine _reflow;
     private List<LineMove> _reflowMoves;
-    private bool _skipReflowOnce;
+    private bool _skipReflow;
 
     private class GlideState
     {
@@ -761,7 +756,14 @@ public class ManageSheets : MonoBehaviour
         target.SetPositionAndRotation(g.toPos, g.toRot);
     }
 
-    public void SuppressNextReflow() => _skipReflowOnce = true;
+    // Runs a change whose rebuild should snap rather than reflow. The rebuild is
+    // synchronous, so the flag never outlives the change it was set for.
+    public void WithoutReflow(Action change)
+    {
+        _skipReflow = true;
+        try { change(); }
+        finally { _skipReflow = false; }
+    }
 
     private float _agentMotionSpeed = -1f;
     private bool _agentMotionInstant;
@@ -834,6 +836,13 @@ public class ManageSheets : MonoBehaviour
     {
         if (_reflow != null) { StopCoroutine(_reflow); _reflow = null; }
     }
+
+    private void StopProjectionRise()
+    {
+        if (_projectionRiseRoutine != null) { StopCoroutine(_projectionRiseRoutine); _projectionRiseRoutine = null; }
+    }
+
+    private static Vector3 OrOne(Vector3 scale) => scale.sqrMagnitude > 1e-6f ? scale : Vector3.one;
 
     public IEnumerator WaitForReflow()
     {
@@ -913,7 +922,7 @@ public class ManageSheets : MonoBehaviour
 
     private void CompleteReflow()
     {
-        if (_reflow != null) { StopCoroutine(_reflow); _reflow = null; }
+        StopReflow();
         if (_reflowMoves == null) return;
 
         for (int i = 0; i < _reflowMoves.Count; i++)
@@ -951,7 +960,7 @@ public class ManageSheets : MonoBehaviour
 
         CompleteReflow();
 
-        if (_projectionRiseRoutine != null) { StopCoroutine(_projectionRiseRoutine); _projectionRiseRoutine = null; }
+        StopProjectionRise();
         if (_projectionRise > 0f)
         {
             _projectionRise = 0f;
@@ -962,14 +971,14 @@ public class ManageSheets : MonoBehaviour
     public void AmendReorderRecord()
     {
         EditList edits = ManageDatasets.ActiveEdits;
-        if (edits == null || _bound == null) return;
+        if (_bound == null) return;
 
         for (int i = edits.Count - 1; i >= 0; i--)
         {
             Edit e = edits[i];
             if (e.kind != EditKind.Sort || e.reorderPreOrder == null) continue;
 
-            IReadOnlyList<int> live = e.reorderIsColumn ? _bound.ColumnOrder : _bound.RowOrder;
+            IReadOnlyList<int> live = _bound.OrderOf(e.reorderIsColumn);
             int changed = 0;
             for (int v = 0; v < live.Count && v < e.reorderPreOrder.Count; v++)
                 if (live[v] != e.reorderPreOrder[v]) changed++;
@@ -988,7 +997,7 @@ public class ManageSheets : MonoBehaviour
     private void AmendPoseRecord(CreateSheet piece)
     {
         EditList edits = ManageDatasets.ActiveEdits;
-        if (edits == null || piece == null) return;
+        if (piece == null) return;
 
         for (int i = edits.Count - 1; i >= 0; i--)
         {
@@ -1004,7 +1013,7 @@ public class ManageSheets : MonoBehaviour
             m.distance = transform.TransformVector(m.postPos - m.prePos).magnitude;
             e.move = m;
 
-            Vector3 preScale = m.preScale.sqrMagnitude > 1e-6f ? m.preScale : Vector3.one;
+            Vector3 preScale = OrOne(m.preScale);
             if ((m.postPos - m.prePos).sqrMagnitude < 1e-8f &&
                 Quaternion.Angle(m.postRot, m.preRot) < 0.01f &&
                 (m.postScale - preScale).sqrMagnitude < 1e-8f)
@@ -1168,16 +1177,19 @@ public class ManageSheets : MonoBehaviour
 
     private CreateSheet NewSheet()
     {
-        EnsureRoot();
-        GameObject go = sheetPrefab != null ? Instantiate(sheetPrefab, _root) : new GameObject("Sheet");
-        if (go.transform.parent != _root) go.transform.SetParent(_root, false);
-
-        CreateSheet s = go.GetComponent<CreateSheet>();
-        if (s == null) s = go.AddComponent<CreateSheet>();
+        CreateSheet s = SpawnPiece("Sheet");
         s.SetGrabbable(_sheetsGrabbable);
         s.sheetId = NextFreeId();
-        go.name = $"Sheet_{s.sheetId}";
+        s.gameObject.name = $"Sheet_{s.sheetId}";
         return s;
+    }
+
+    private CreateSheet SpawnPiece(string name)
+    {
+        EnsureRoot();
+        GameObject go = sheetPrefab != null ? Instantiate(sheetPrefab, _root) : new GameObject(name);
+        if (go.transform.parent != _root) go.transform.SetParent(_root, false);
+        return UILayout.Ensure<CreateSheet>(go);
     }
 
     private int NextFreeId()
@@ -1193,7 +1205,7 @@ public class ManageSheets : MonoBehaviour
 
     private void ClearSheets()
     {
-        if (_reflow != null) { StopCoroutine(_reflow); _reflow = null; }
+        StopReflow();
         foreach (GlideState g in _pieceGlides.Values)
             if (g.routine != null) StopCoroutine(g.routine);
         _pieceGlides.Clear();

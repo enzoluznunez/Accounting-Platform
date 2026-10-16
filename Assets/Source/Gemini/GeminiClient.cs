@@ -23,7 +23,6 @@ public class GeminiClient : MonoBehaviour {
     private int _connectQueuedFrame = -1;
     private GeminiStatus _lastStatus = GeminiStatus.Off;
 
-    public bool Ready => _ready;
     public bool Active => _active;
     public event Action<bool> ActiveChanged;
     public event Action<GeminiStatus> StatusChanged;
@@ -39,12 +38,12 @@ public class GeminiClient : MonoBehaviour {
         _ready = true;
         Gemini.SetKeepAlive(_active);
         if (_active && isActiveAndEnabled) {
-            await ConnectNow("active");
+            await ConnectNow();
             return;
         }
     }
 
-    private async Task ConnectNow(string reason) {
+    private async Task ConnectNow() {
         await Gemini.EnsureInit(enableWebSearch);
         if (this == null || !isActiveAndEnabled) return;
 
@@ -64,10 +63,9 @@ public class GeminiClient : MonoBehaviour {
         if (_ready) {
             Gemini.SetKeepAlive(active);
             if (active) {
-                _ = ConnectNow("activate");
+                _ = ConnectNow();
             }
             else {
-                Gemini.Mute();
                 Gemini.Disconnect();
             }
         }
@@ -98,7 +96,7 @@ public class GeminiClient : MonoBehaviour {
 
         if (_connectQueuedFrame >= 0 && Time.frameCount > _connectQueuedFrame) {
             _connectQueuedFrame = -1;
-            if (CanWarm) _ = ConnectNow("queued");
+            if (CanWarm) _ = ConnectNow();
         }
 
         var status = Gemini.Status;
@@ -130,7 +128,7 @@ public class GeminiClient : MonoBehaviour {
         }
 
         if (_active) {
-            _ = ConnectNow("resume");
+            _ = ConnectNow();
         }
         else if (_intentHeld && CanWarm && connectPolicy != ConnectPolicy.OnFirstUse) {
             QueueConnect();

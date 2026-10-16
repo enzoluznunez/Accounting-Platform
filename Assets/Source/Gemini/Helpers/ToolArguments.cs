@@ -92,7 +92,8 @@ public static class ToolArguments {
         object instance = Activator.CreateInstance(args);
 
         foreach (FieldInfo f in Fields(args)) {
-            bool present = values != null && values.TryGetValue(f.Name, out var raw) && raw != null;
+            object value = null;
+            bool present = values != null && values.TryGetValue(f.Name, out value) && value != null;
 
             if (!present) {
                 if (f.GetCustomAttribute<OptionalAttribute>() == null) {
@@ -102,7 +103,6 @@ public static class ToolArguments {
                 continue;
             }
 
-            values.TryGetValue(f.Name, out var value);
             object bound;
             try {
                 bound = Convert(value, Underlying(f.FieldType));

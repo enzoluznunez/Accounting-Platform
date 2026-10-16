@@ -12,20 +12,20 @@ public static class AgentTurn
     {
         Marked = true;
         EditList edits = ManageDatasets.ActiveEdits;
-        if (edits != null && !baselines.ContainsKey(edits)) baselines[edits] = edits.Count;
+        if (!baselines.ContainsKey(edits)) baselines[edits] = edits.Count;
     }
 
     private static int BaselineOf(EditList edits) =>
-        edits != null && baselines.TryGetValue(edits, out int start) ? start : edits?.Count ?? 0;
+        baselines.TryGetValue(edits, out int start) ? start : edits.Count;
 
     public static int AppliedSoFar()
     {
         EditList edits = ManageDatasets.ActiveEdits;
-        if (!Marked || edits == null) return 0;
+        if (!Marked) return 0;
         return Mathf.Max(0, edits.Count - BaselineOf(edits));
     }
 
-    public static void UserTookControl(string reason)
+    public static void UserTookControl()
     {
         ManageSheets sheets = Scene.Sheets;
         if (sheets != null) sheets.Interrupt();
@@ -41,8 +41,7 @@ public static class AgentTurn
         int stamped = ManageDatasets.ActiveEdits.StampGroup(BaselineOf(ManageDatasets.ActiveEdits));
         if (stamped <= 0) return;
 
-        StateChannel.Record("Assistant",
-            $"the user stopped you after {stamped} of your changes had been applied");
+        StateChannel.Record($"the user stopped you after {stamped} of your changes had been applied");
 
         if (sheets != null)
             Notices.Show(sheets, "Assistant Stopped", stamped == 1

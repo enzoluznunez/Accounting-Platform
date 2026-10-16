@@ -27,8 +27,7 @@ public class PosterMesh
     // The palette is hex, which is sRGB, but a vertex colour is handed to the
     // shader unconverted and the project renders linear. Converting here is what
     // keeps a captured band the same colour as the hex the pipeline sends.
-    public static Color Shade(Color color, Vector3 normal) => Shade(color, normal, 1f);
-
+    //
     // The exposure argument is the second depth cue: geometry alone cannot tell
     // a bowl from a dome once the silhouette is ambiguous, but a hollow that
     // darkens as it deepens is read as a hollow immediately. The caller passes

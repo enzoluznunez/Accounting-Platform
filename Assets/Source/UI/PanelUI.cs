@@ -283,10 +283,7 @@ public abstract class PanelUI : MonoBehaviour
 
         RectTransform rt = UILayout.EnsureChild(border, "PanelBack");
 
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = new Vector2(Style.SmallBorder, Style.SmallBorder);
-        rt.offsetMax = new Vector2(-Style.SmallBorder, -Style.SmallBorder);
+        UILayout.Fill(rt, Style.SmallBorder);
 
         Image back = UILayout.Ensure<Image>(rt.gameObject);
 
@@ -294,8 +291,7 @@ public abstract class PanelUI : MonoBehaviour
         back.color = Style.Black;
         back.raycastTarget = false;
 
-        Material mat = BackMaterial;
-        if (mat != null) back.material = mat;
+        ApplyBack(back);
 
         rt.SetAsLastSibling();
     }
@@ -318,6 +314,14 @@ public abstract class PanelUI : MonoBehaviour
         if (cached == null)
             Debug.LogError($"[PanelUI] No material at Resources/{path}; those graphics keep the default UI material.");
         return cached;
+    }
+
+    public static void ApplyBack(Image image)
+    {
+        if (image == null) return;
+
+        Material mat = BackMaterial;
+        if (mat != null) image.material = mat;
     }
 
     public static void ApplyFront(Image image)
@@ -348,10 +352,7 @@ public abstract class PanelUI : MonoBehaviour
         for (int i = 0; i < roots.Count; i++)
         {
             if (!(roots[i] is RectTransform rt)) continue;
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = new Vector2(Style.SmallBorder, Style.SmallBorder);
-            rt.offsetMax = new Vector2(-Style.SmallBorder, -Style.SmallBorder);
+            UILayout.Fill(rt, Style.SmallBorder);
         }
     }
 
@@ -406,9 +407,7 @@ public abstract class PanelUI : MonoBehaviour
             HorizontalLayoutGroup hlg = bar.GetComponent<HorizontalLayoutGroup>();
             if (hlg != null)
             {
-                hlg.padding = new RectOffset(
-                    (int)Style.PanelInset, (int)Style.PanelInset,
-                    (int)Style.SmallPadding, (int)Style.SmallPadding);
+                hlg.padding = Style.PanePadding();
                 hlg.childForceExpandHeight = false;
             }
 
@@ -419,8 +418,7 @@ public abstract class PanelUI : MonoBehaviour
             {
                 if (!StyleHeaderLabel(titles[t].GetComponent<TextMeshProUGUI>())) continue;
 
-                LayoutElement titleLE = titles[t].GetComponent<LayoutElement>();
-                if (titleLE == null) titleLE = titles[t].gameObject.AddComponent<LayoutElement>();
+                LayoutElement titleLE = UILayout.Ensure<LayoutElement>(titles[t].gameObject);
                 titleLE.preferredWidth = -1f;
                 titleLE.flexibleWidth = hasSpacer ? 0f : 1f;
             }
@@ -433,10 +431,7 @@ public abstract class PanelUI : MonoBehaviour
 
     protected static void ApplyPaneLayout(HorizontalOrVerticalLayoutGroup layout)
     {
-        layout.padding.left = (int)Style.PanelInset;
-        layout.padding.right = (int)Style.PanelInset;
-        layout.padding.top = (int)Style.SmallPadding;
-        layout.padding.bottom = (int)Style.SmallPadding;
+        layout.padding = Style.PanePadding();
         layout.spacing = Style.SmallPadding;
     }
 

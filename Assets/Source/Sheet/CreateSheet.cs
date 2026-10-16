@@ -54,7 +54,6 @@ public class CreateSheet : MonoBehaviour
     private Quaternion _grabRot;
     private Vector3 _grabScale;
 
-    public IReadOnlyList<CreateCube> Cubes => _live;
     public int RowCount => rowMax - rowMin + 1;
     public int ColCount => colMax - colMin + 1;
     public float CellSize => _cellSize;

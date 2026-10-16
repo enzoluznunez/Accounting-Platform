@@ -11,15 +11,15 @@ public class ManageDatasets : MonoBehaviour
     public ManageSheets sheetManager;
     public ManageTools toolManager;
 
-    public event Action OnDatasetsChanged;
     public event Action<int> OnActiveDatasetChanged;
-    public event Action<string> OnDatasetLoadFailed;
 
     public class Dataset
     {
         public DataSource source;
         public string label;
         public string payload;
+
+        public string DisplayLabel => string.IsNullOrEmpty(label) ? "dataset" : label;
         public bool loaded;
 
         // A parse is in flight exactly while a reader exists that has not
@@ -74,13 +74,15 @@ public class ManageDatasets : MonoBehaviour
 
     private void ResolveRefs()
     {
-        if (sheetManager == null) sheetManager = FindAnyObjectByType<ManageSheets>();
-        if (toolManager == null) toolManager = FindAnyObjectByType<ManageTools>();
+        if (sheetManager == null) sheetManager = Scene.Sheets;
+        if (toolManager == null) toolManager = Scene.Tools;
     }
 
-    public void AddDataset(string payload, string label = null)
+    // Hands back the entry the payload now lives in: the new one, or the one
+    // already holding the same payload, which is switched to instead.
+    public Dataset AddDataset(string payload, string label = null)
     {
-        if (string.IsNullOrEmpty(payload)) return;
+        if (string.IsNullOrEmpty(payload)) return null;
 
         for (int i = 0; i < _datasets.Count; i++)
             if (_datasets[i].payload == payload)
@@ -90,46 +92,61 @@ public class ManageDatasets : MonoBehaviour
                 SwitchDataset(i);
                 Notices.Show(this, "Already Open",
                     alreadyActive ? $"{openLabel} is already open." : $"Switched to {openLabel}.");
-                return;
+                return _datasets[i];
             }
 
         Dataset dataset = new Dataset
         {
             payload = payload,
-            label = label ?? Stylize(DeriveLabel(payload, _datasetsCreated))
+            label = UniqueLabel(label ?? Stylize(DeriveLabel(payload, _datasetsCreated)))
         };
         _datasets.Add(dataset);
         SwitchDataset(_datasets.Count - 1);
+        return dataset;
     }
 
-    // The rail is torn down and rebuilt on every change, so a whole index is
-    // listed in one go and announced once rather than once per industry.
     public void AddCatalogEntries(IEnumerable<(string file, string label, int companies)> entries)
     {
         if (entries == null) return;
 
-        bool added = false;
         foreach ((string file, string label, int companies) in entries)
-            added |= AddCatalogEntryQuietly(file, label, companies);
-
-        if (added) OnDatasetsChanged?.Invoke();
+            AddCatalogEntry(file, label, companies);
     }
 
-    private bool AddCatalogEntryQuietly(string file, string label, int companies)
+    private void AddCatalogEntry(string file, string label, int companies)
     {
-        if (string.IsNullOrEmpty(file)) return false;
+        if (string.IsNullOrEmpty(file)) return;
 
         for (int i = 0; i < _datasets.Count; i++)
-            if (_datasets[i].payload == file) return false;
+            if (_datasets[i].payload == file) return;
 
         _datasets.Add(new Dataset
         {
             payload = file,
-            label = string.IsNullOrEmpty(label) ? Stylize(DeriveLabel(file, _datasets.Count)) : label,
+            label = UniqueLabel(string.IsNullOrEmpty(label) ? Stylize(DeriveLabel(file, _datasets.Count)) : label),
             catalogued = true,
             companies = companies
         });
-        return true;
+    }
+
+    // Datasets are picked by name, so no two may share one: a second sheet of
+    // the same industry becomes "Retail Trade (2)" rather than a name that
+    // matches twice and so picks out neither.
+    private string UniqueLabel(string label)
+    {
+        if (string.IsNullOrEmpty(label) || !LabelTaken(label)) return label;
+        for (int n = 2; ; n++)
+        {
+            string candidate = $"{label} ({n})";
+            if (!LabelTaken(candidate)) return candidate;
+        }
+    }
+
+    private bool LabelTaken(string label)
+    {
+        for (int i = 0; i < _datasets.Count; i++)
+            if (string.Equals(_datasets[i].label, label, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
     }
 
     private readonly Dictionary<Dataset, TaskCompletionSource<bool>> _awaitingLoad =
@@ -204,13 +221,10 @@ public class ManageDatasets : MonoBehaviour
                 Unload(dataset);
                 Notices.Show(this, "Industry Unavailable",
                     reason ?? $"{dataset.label} could not be read.");
-                OnDatasetsChanged?.Invoke();
                 return;
             }
 
-            string payload = dataset.payload;
-            RemoveDataset(index);
-            OnDatasetLoadFailed?.Invoke(payload);
+            RemoveUnloaded(index);
             Notices.Show(this, "Not Read",
                 reason ?? "That dataset could not be read.");
             return;
@@ -218,40 +232,23 @@ public class ManageDatasets : MonoBehaviour
 
         dataset.loaded = true;
 
-        StateChannel.Record("Dataset", $"loaded a new dataset, {dataset.label}");
-        OnDatasetsChanged?.Invoke();
+        StateChannel.Record($"loaded a new dataset, {dataset.label}");
         if (requested) SwitchDataset(index);
     }
 
-    public void RemoveDataset(int index)
+    // Drops an entry whose read failed. It never loaded, so it was never the
+    // active dataset and nothing on screen belongs to it.
+    private void RemoveUnloaded(int index)
     {
         if (index < 0 || index >= _datasets.Count) return;
 
         Dataset dataset = _datasets[index];
-        bool wasActive = index == _active;
         if (dataset == _requested) _requested = null;
-
-        if (wasActive && sheetManager != null) sheetManager.CommitPendingGrabs();
 
         _datasets.RemoveAt(index);
         if (_active > index) _active--;
-        else if (wasActive) _active = -1;
 
         if (dataset.source != null) Destroy(dataset.source.gameObject);
-
-        if (wasActive)
-        {
-            if (_datasets.Count > 0) SwitchDataset(_datasets.Count - 1);
-            else
-            {
-                if (sheetManager != null) sheetManager.SetDataSource(null);
-            }
-        }
-
-        if (dataset.loaded)
-            StateChannel.Record("Dataset", $"closed the dataset {dataset.label}");
-        OnDatasetsChanged?.Invoke();
-        if (wasActive && _datasets.Count == 0) OnActiveDatasetChanged?.Invoke(-1);
     }
 
 
@@ -285,7 +282,7 @@ public class ManageDatasets : MonoBehaviour
         OnActiveDatasetChanged?.Invoke(index);
 
         StateChannel.RecordState("dataset",
-            $"the {(string.IsNullOrEmpty(next.label) ? "dataset" : next.label)} dataset is open" +
+            $"the {next.DisplayLabel} dataset is open" +
             "; row and column numbers and edits all belong to it");
 
         ReportAxes(next.source);
@@ -304,7 +301,7 @@ public class ManageDatasets : MonoBehaviour
 
     private static string AxisSketch(DataSource source, bool columns)
     {
-        IReadOnlyList<int> order = columns ? source.ColumnOrder : source.RowOrder;
+        IReadOnlyList<int> order = source.OrderOf(columns);
         if (order == null || order.Count == 0) return null;
 
         var shown = new List<string>(2);

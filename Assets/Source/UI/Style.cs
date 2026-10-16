@@ -66,6 +66,9 @@ public static class Style
     public const float ButtonTextPad = 10f;
     public const float PanelInset = MediumPadding;
 
+    public static RectOffset PanePadding() =>
+        new RectOffset((int)PanelInset, (int)PanelInset, (int)SmallPadding, (int)SmallPadding);
+
     public const float ScrollSensitivity = 24f;
     public const float HeaderHeight = 30f;
     public const float ValueColumn = 90f;

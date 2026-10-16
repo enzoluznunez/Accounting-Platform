@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using System.Text.Json;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -43,7 +42,7 @@ public class IndustryCatalog : MonoBehaviour
     private void Start()
     {
         if (manageDatasets == null) manageDatasets = GetComponent<ManageDatasets>();
-        if (manageDatasets == null) manageDatasets = FindAnyObjectByType<ManageDatasets>();
+        if (manageDatasets == null) manageDatasets = Scene.Datasets;
 
         if (manageDatasets == null)
         {
@@ -74,10 +73,7 @@ public class IndustryCatalog : MonoBehaviour
     {
         if (string.IsNullOrEmpty(fileName)) yield break;
 
-        string path = Path.Combine(Application.streamingAssetsPath, fileName);
-        string url = path.Contains("://") ? path : "file://" + path;
-
-        using (UnityWebRequest www = UnityWebRequest.Get(url))
+        using (UnityWebRequest www = UnityWebRequest.Get(StreamingAssets.Url(fileName)))
         {
             yield return www.SendWebRequest();
 
@@ -90,7 +86,7 @@ public class IndustryCatalog : MonoBehaviour
 
     private IEnumerator ListIndustries()
     {
-        string url = FinancialsApi.BaseUrl.TrimEnd('/') + "/industries";
+        string url = FinancialsApi.Url("/industries");
 
         using (UnityWebRequest www = UnityWebRequest.Get(url))
         {
@@ -180,7 +176,7 @@ public class IndustryCatalog : MonoBehaviour
     private static string SheetUrl(string division)
     {
         string query = $"/sheet?categories={AllCategories}&limit={SheetLimit}";
-        return FinancialsApi.BaseUrl.TrimEnd('/') + (division == null
+        return FinancialsApi.Url(division == null
             ? query + $"&per={PerIndustry}"
             : query + $"&division={Uri.EscapeDataString(division)}");
     }

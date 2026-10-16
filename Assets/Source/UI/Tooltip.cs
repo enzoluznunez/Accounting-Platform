@@ -38,7 +38,6 @@ public class Tooltip : MonoBehaviour
     private TextMeshProUGUI _statsTitle;
     private readonly TextMeshProUGUI[] _statCells = new TextMeshProUGUI[StatNames.Length];
 
-    private bool _statsPending;
     private SelectionStats _pendingStats;
     private Func<Vector3> _pendingAnchor;
 
@@ -154,7 +153,6 @@ public class Tooltip : MonoBehaviour
 
         FillStats(_statCells, selection.stats);
 
-        _statsPending = true;
         _pendingStats = selection;
         _pendingAnchor = anchor;
 
@@ -167,14 +165,14 @@ public class Tooltip : MonoBehaviour
 
     public void HideStats()
     {
-        _statsPending = false;
+        _pendingAnchor = null;
         if (_statsGroup == null || !_statsGroup.activeSelf) return;
         Hide();
     }
 
     public void DismissNotice()
     {
-        if (_statsPending && _pendingAnchor != null) ShowStats(_pendingAnchor, _pendingStats);
+        if (_pendingAnchor != null) ShowStats(_pendingAnchor, _pendingStats);
         else Hide();
     }
 

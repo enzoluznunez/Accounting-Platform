@@ -6,15 +6,11 @@ public static class StateChannel
 
     private static int _agentDepth;
 
-    public static bool InAgentCall
-    {
-        get => _agentDepth > 0;
-        set
-        {
-            if (value) _agentDepth++;
-            else if (_agentDepth > 0) _agentDepth--;
-        }
-    }
+    public static bool InAgentCall => _agentDepth > 0;
+
+    // Calls nest, so each Enter is paired with an Exit rather than set and cleared.
+    public static void EnterAgentCall() => _agentDepth++;
+    public static void ExitAgentCall() { if (_agentDepth > 0) _agentDepth--; }
 
     public static bool UserDriven => !InAgentCall;
 
@@ -24,7 +20,7 @@ public static class StateChannel
     private static readonly List<string> _stateOrder = new List<string>();
     private static bool _snapshotWanted;
 
-    public static void Record(string source, string what)
+    public static void Record(string what)
     {
         if (string.IsNullOrEmpty(what)) return;
 
@@ -57,7 +53,7 @@ public static class StateChannel
     public static void RecordState(string key, string what)
     {
         SetState(key, what);
-        Record(key, what);
+        Record(what);
     }
 
     public static void ClearPending()

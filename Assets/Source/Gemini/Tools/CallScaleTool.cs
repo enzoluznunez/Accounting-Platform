@@ -31,8 +31,7 @@ public sealed class CallScaleTool : AgenticTool<CallScaleTool.Args> {
     protected override void Run(Args args, Dictionary<string, object> result) {
         if (!EnsureToolSelected(ToolType.Scale, result)) return;
 
-        string direction = args.direction.Trim().ToLowerInvariant();
-        bool enlarge = direction == "enlarge";
+        bool enlarge = args.direction == "enlarge";
 
         float percent = Mathf.Clamp(args.percent ?? DefaultPercent, MinPercent, MaxPercent);
         float mult = enlarge ? 1f + percent / 100f : 1f - percent / 100f;
@@ -50,7 +49,7 @@ public sealed class CallScaleTool : AgenticTool<CallScaleTool.Args> {
         mgr.GetCommittedPose(sheet, out _, out _, out Vector3 nowScale);
         float after = nowScale.x;
 
-        result["resized"] = direction;
+        result["resized"] = args.direction;
         result["percent"] = System.Math.Round(percent, 1);
         result["scaleBefore"] = System.Math.Round(before, 3);
         result["scale"] = System.Math.Round(after, 3);

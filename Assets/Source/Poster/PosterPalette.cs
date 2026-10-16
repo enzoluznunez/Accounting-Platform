@@ -28,11 +28,6 @@ public static class PosterPalette
 
     public static readonly Color[] Colors = Build();
 
-    public static int Count => Colors.Length;
-
-    public static Color At(int index) =>
-        Colors[((index % Colors.Length) + Colors.Length) % Colors.Length];
-
     // The same ten colours, reordered darkest to lightest.
     //
     // The catalogue order is arbitrary -- it names industries, and nothing about

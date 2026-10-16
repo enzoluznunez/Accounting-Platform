@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 using Oculus.Interaction;
 using Oculus.Interaction.Input;
 
@@ -171,7 +169,7 @@ public class Watch : MonoBehaviour
     {
         if (geminiClient == null) return;
         if (geminiClient.Active == active) return;
-        if (!active && cause != AssistantCause.Agent) AgentTurn.UserTookControl("assistant off");
+        if (!active && cause != AssistantCause.Agent) AgentTurn.UserTookControl();
         if (!active) Notices.HideNotice();
         geminiClient.SetActive(active);
         ReportActivation(active, cause);

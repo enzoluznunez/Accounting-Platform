@@ -59,17 +59,13 @@ public static class UIButton
         if (h.Back != null) return h.Back;
 
         RectTransform rt = UILayout.EnsureChild(h.Root.transform, "ButtonBack");
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
+        UILayout.Fill(rt);
 
         Image back = UILayout.Ensure<Image>(rt.gameObject);
         RoundedSprite.Apply(back, h.Radius);
         back.color = Style.Black;
         back.raycastTarget = false;
-        Material backMat = PanelUI.BackMaterial;
-        if (backMat != null) back.material = backMat;
+        PanelUI.ApplyBack(back);
 
         rt.SetAsLastSibling();
 
@@ -90,8 +86,7 @@ public static class UIButton
 
         if (h.Back == null) return;
         RoundedSprite.Apply(h.Back, radius);
-        Material backMat = PanelUI.BackMaterial;
-        if (backMat != null) h.Back.material = backMat;
+        PanelUI.ApplyBack(h.Back);
     }
 
     // A square at the right end of a row, drawn the way every other surface here
@@ -118,10 +113,7 @@ public static class UIButton
         h.CheckFrame = frame;
 
         RectTransform fillRt = UILayout.EnsureChild(rt, "Fill");
-        fillRt.anchorMin = Vector2.zero;
-        fillRt.anchorMax = Vector2.one;
-        fillRt.offsetMin = new Vector2(Style.SmallBorder, Style.SmallBorder);
-        fillRt.offsetMax = new Vector2(-Style.SmallBorder, -Style.SmallBorder);
+        UILayout.Fill(fillRt, Style.SmallBorder);
         Image fill = UILayout.Ensure<Image>(fillRt.gameObject);
         RoundedSprite.Apply(fill, 0f);
         fill.raycastTarget = false;
@@ -194,10 +186,7 @@ public static class UIButton
         h.Button = button;
 
         RectTransform innerRt = UILayout.EnsureChild(root.transform, "Inner");
-        innerRt.anchorMin = Vector2.zero;
-        innerRt.anchorMax = Vector2.one;
-        innerRt.offsetMin = new Vector2(Style.SmallBorder, Style.SmallBorder);
-        innerRt.offsetMax = new Vector2(-Style.SmallBorder, -Style.SmallBorder);
+        UILayout.Fill(innerRt, Style.SmallBorder);
         Image inner = UILayout.Ensure<Image>(innerRt.gameObject);
         RoundedSprite.Apply(inner, Style.InnerRadius(radius));
         inner.raycastTarget = false;

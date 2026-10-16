@@ -68,14 +68,14 @@ Description = "Choose what stands on the sheet: which metrics, or which companie
 
         var hidden = new HashSet<int>(showAll
             ? new List<int>()
-            : rows ? data.HiddenRowsInOrder() : data.HiddenGroupsInOrder());
+            : FilterTool.HiddenOf(data, rows));
 
         if (only) {
             List<int> keep = new List<int>();
             if (!Resolve(filter, rows, args.only, result, keep)) return;
 
             hidden.Clear();
-            List<int> all = rows ? data.DataRowsInOrder() : data.DataGroupsInOrder();
+            List<int> all = FilterTool.InOrder(data, rows);
             for (int i = 0; i < all.Count; i++)
                 if (!keep.Contains(all[i])) hidden.Add(all[i]);
         }
@@ -164,12 +164,8 @@ Description = "Choose what stands on the sheet: which metrics, or which companie
         var showing = new List<object>();
         var off = new List<object>();
 
-        if (rows)
-            foreach (int row in data.DataRowsInOrder())
-                (data.IsRowHidden(row) ? off : showing).Add(DataSource.RowLabelOfData(data, row));
-        else
-            foreach (int group in data.DataGroupsInOrder())
-                (data.IsDataGroupHidden(group) ? off : showing).Add(DataSource.GroupLabelOfData(data, group));
+        foreach (int id in FilterTool.InOrder(data, rows))
+            (FilterTool.IsHidden(data, rows, id) ? off : showing).Add(FilterTool.Label(data, id, rows));
 
         string noun = rows ? "company" : "metric";
         result["axis"] = noun;

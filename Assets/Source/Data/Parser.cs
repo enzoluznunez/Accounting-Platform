@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using UnityEngine;
 
 public class Parser : DataSource
@@ -42,9 +41,7 @@ public class Parser : DataSource
 
     private System.Collections.IEnumerator LoadFromStreamingAssets(string fileName)
     {
-        string path = Path.Combine(Application.streamingAssetsPath, fileName);
-        string url = path.Contains("://") ? path : "file://" + path;
-        return LoadFromWebRequest(url);
+        return LoadFromWebRequest(StreamingAssets.Url(fileName));
     }
 
     private System.Collections.IEnumerator LoadFromWebRequest(string url)
@@ -183,8 +180,6 @@ public class Parser : DataSource
             return "That dataset has no numeric values.";
         }
 
-        EnsureOrders();
-
         Debug.Log($"[Parser:{name}] Loaded grid {rowCount} rows x {colCount} cols " +
                   $"({ColumnGroupSize} col(s) per group, normalised range [{_globalMin}, {_globalMax}])");
         return null;
@@ -194,7 +189,6 @@ public class Parser : DataSource
     {
         Debug.LogWarning($"[Parser:{name}] {reason}");
         ClearGrid();
-        EnsureOrders();
         RaiseLoadFailed();
         ReportResult(false, reason);
     }
@@ -357,10 +351,17 @@ public class Parser : DataSource
         return fields;
     }
 
+    // 'NaN', 'Infinity' and numbers too large for a float all parse, but none
+    // can be drawn, and one would throw off every scale it reached, so they
+    // count as empty cells.
     private static bool TryParseFloat(string value, out float result)
     {
         result = 0f;
-        return !string.IsNullOrEmpty(value) &&
-               float.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out result);
+        if (string.IsNullOrEmpty(value) ||
+            !float.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out result))
+            return false;
+        if (!float.IsNaN(result) && !float.IsInfinity(result)) return true;
+        result = 0f;
+        return false;
     }
 }

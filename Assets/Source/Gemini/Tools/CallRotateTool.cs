@@ -34,7 +34,7 @@ public sealed class CallRotateTool : AgenticTool<CallRotateTool.Args> {
     protected override void Run(Args args, Dictionary<string, object> result) {
         if (!EnsureToolSelected(ToolType.Rotate, result)) return;
 
-        string mode = string.IsNullOrWhiteSpace(args.mode) ? "by" : args.mode.Trim().ToLowerInvariant();
+        string mode = args.mode ?? "by";
 
         if (!TryResolveSheet(result, "rotate", out var mgr, out var sheet)) return;
 
@@ -49,7 +49,6 @@ public sealed class CallRotateTool : AgenticTool<CallRotateTool.Args> {
                 ApplyPieceTransform(mgr, sheet, t => t.localRotation = Quaternion.identity);
                 step["rotated"] = "reset";
                 break;
-            default: step["error"] = $"Unknown mode '{mode}'. Use 'by', 'face', or 'reset'."; break;
         }
     }
 

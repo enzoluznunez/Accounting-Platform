@@ -279,9 +279,7 @@ public class ToolPanelUI : PanelUI
         if (grid == null) return;
         _toolGrid = grid;
 
-        grid.padding = new RectOffset(
-            (int)Style.PanelInset, (int)Style.PanelInset,
-            (int)Style.SmallPadding, (int)Style.SmallPadding);
+        grid.padding = Style.PanePadding();
         grid.spacing = new Vector2(Style.SmallPadding, Style.SmallPadding);
 
         LayoutElement le = UILayout.Ensure<LayoutElement>(grid.gameObject);

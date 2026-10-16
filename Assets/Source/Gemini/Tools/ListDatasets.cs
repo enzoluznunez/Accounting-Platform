@@ -28,7 +28,7 @@ public sealed class ListDatasets : AgenticTool {
             for (int i = datasets.DatasetCount - 1; i >= 0; i--) {
                 var dataset = datasets.Datasets[i];
                 bool active = i == datasets.ActiveIndex;
-                string name = string.IsNullOrEmpty(dataset.label) ? "dataset" : dataset.label;
+                string name = dataset.DisplayLabel;
 
                 // An industry that has not been read yet has no sheet and no
                 // edits; saying so is the whole of what there is to report.

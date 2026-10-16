@@ -105,8 +105,7 @@ public sealed class GetStatistics : AgenticTool<GetStatistics.Args> {
         var metrics = new List<object>();
         int blocks = data.GroupCount(true);
         for (int b = 0; b < blocks; b++) {
-            data.GroupSpan(true, b, out int lo, out int hi);
-            if (hi > colMax) hi = colMax;
+            BlockSpan(true, b, 0, colMax, out int lo, out int hi);
             var one = new Dictionary<string, object> { { "metric", DataSource.GroupLabelAt(data, true, b) } };
             Fill(one, SheetStats.Over(data, visRow, visRow, lo, hi), data, false, visRow);
             metrics.Add(one);

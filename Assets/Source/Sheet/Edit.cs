@@ -27,13 +27,11 @@ public struct ProjectionRecord
 public class Edit
 {
     public EditKind kind;
-    public int sheetId = -1;
     public MoveRecord move;
     public ProjectionRecord projection;
 
     public bool reorderIsColumn;
     public List<int> reorderPreOrder;
-    public DataSource.SortMode reorderPreMode;
     public int reorderFrom;
     public int reorderTarget;
     public int reorderLines;
@@ -87,22 +85,16 @@ public class EditList : List<Edit>
         return steps;
     }
 
-    public static event System.Action OnChanged;
-
-    private static void RaiseChanged() => OnChanged?.Invoke();
-
     private void Push(Edit e)
     {
         e.group = _group;
         Add(e);
-        RaiseChanged();
     }
 
     public void DropAt(int index)
     {
         if (index < 0 || index >= Count) return;
         RemoveAt(index);
-        RaiseChanged();
     }
 
     public int StampGroup(int fromIndex)
@@ -120,35 +112,27 @@ public class EditList : List<Edit>
         if (Count == 0) return null;
         Edit e = this[Count - 1];
         RemoveAt(Count - 1);
-        RaiseChanged();
         return e;
     }
 
     public void PushMove(MoveRecord move, EditKind kind) =>
-        Push(new Edit { kind = kind, sheetId = move.sheetId, move = move });
+        Push(new Edit { kind = kind, move = move });
 
-    public void PushSort(bool isColumn, IReadOnlyList<int> preOrder, DataSource.SortMode preMode, int from, int target) =>
+    public void PushSort(bool isColumn, IReadOnlyList<int> preOrder, int from, int target) =>
+        PushOrder(isColumn, preOrder, from, target, 1);
+
+    public void PushReorder(bool isColumn, IReadOnlyList<int> preOrder, int linesMoved) =>
+        PushOrder(isColumn, preOrder, -1, -1, linesMoved);
+
+    private void PushOrder(bool isColumn, IReadOnlyList<int> preOrder, int from, int target, int lines) =>
         Push(new Edit
         {
             kind = EditKind.Sort,
             reorderIsColumn = isColumn,
-            reorderPreOrder = preOrder != null ? new List<int>(preOrder) : new List<int>(),
-            reorderPreMode = preMode,
+            reorderPreOrder = Copy(preOrder),
             reorderFrom = from,
             reorderTarget = target,
-            reorderLines = 1
-        });
-
-    public void PushReorder(bool isColumn, IReadOnlyList<int> preOrder, DataSource.SortMode preMode, int linesMoved) =>
-        Push(new Edit
-        {
-            kind = EditKind.Sort,
-            reorderIsColumn = isColumn,
-            reorderPreOrder = preOrder != null ? new List<int>(preOrder) : new List<int>(),
-            reorderPreMode = preMode,
-            reorderFrom = -1,
-            reorderTarget = -1,
-            reorderLines = linesMoved
+            reorderLines = lines
         });
 
     public void PushProjection(ProjectionRecord projection, EditKind kind) =>
@@ -158,11 +142,13 @@ public class EditList : List<Edit>
         Push(new Edit
         {
             kind = EditKind.Filter,
-            filterPreHidden = preHidden != null ? new List<int>(preHidden) : new List<int>(),
-            filterPostHidden = postHidden != null ? new List<int>(postHidden) : new List<int>(),
+            filterPreHidden = Copy(preHidden),
+            filterPostHidden = Copy(postHidden),
             filterIsRow = isRow
         });
 
     public void DropKind(EditKind kind) => RemoveAll(e => e.kind == kind);
 
+    private static List<int> Copy(IReadOnlyList<int> list) =>
+        list != null ? new List<int>(list) : new List<int>();
 }

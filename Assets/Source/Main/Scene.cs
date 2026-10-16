@@ -7,9 +7,6 @@ public static class Scene {
     private static DataSource dataSource;
     private static Watch watch;
     private static FilterTool filterTool;
-    private static MoveTool moveTool;
-    private static RotateTool rotateTool;
-    private static ScaleTool scaleTool;
     private static ProfileTool profileTool;
     private static SortTool sortTool;
     private static ManageSheets sheetManager;
@@ -21,9 +18,6 @@ public static class Scene {
     public static ToolPanelUI ToolPanel => Resolve(ref toolPanelUI);
     public static Watch Assistant => Resolve(ref watch);
     public static FilterTool Filter => Resolve(ref filterTool);
-    public static MoveTool Move => Resolve(ref moveTool);
-    public static RotateTool Rotate => Resolve(ref rotateTool);
-    public static ScaleTool Scale => Resolve(ref scaleTool);
     public static ProfileTool Profile => Resolve(ref profileTool);
     public static SortTool Sort => Resolve(ref sortTool);
     public static ManageSheets Sheets => Resolve(ref sheetManager);
@@ -33,10 +27,8 @@ public static class Scene {
 
     public static string DatasetLabel {
         get {
-            var d = Datasets;
-            if (d == null || d.ActiveIndex < 0 || d.ActiveIndex >= d.DatasetCount) return "dataset";
-            string label = d.Datasets[d.ActiveIndex].label;
-            return string.IsNullOrEmpty(label) ? "dataset" : label;
+            ManageDatasets.Dataset active = Datasets != null ? Datasets.ActiveDataset : null;
+            return active != null ? active.DisplayLabel : "dataset";
         }
     }
 

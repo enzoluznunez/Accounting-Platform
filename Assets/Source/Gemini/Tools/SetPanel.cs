@@ -17,12 +17,10 @@ public sealed class SetPanel : AgenticTool<SetPanel.Args> {
     };
 
     protected override void Run(Args args, Dictionary<string, object> result) {
-        string state = args.state.Trim().ToLowerInvariant();
-
         var tool = Scene.ToolPanel;
         if (tool == null) { result["error"] = "Tool panel not found in scene."; return; }
 
-        Apply(state, tool.IsVisible, tool.ShowPanel, tool.HidePanel, tool.TogglePanel);
+        Apply(args.state, tool.IsVisible, tool.ShowPanel, tool.HidePanel, tool.TogglePanel);
         result["visible"] = tool.IsVisible;
         result["did"] = tool.IsVisible ? "the tool panel is open" : "the tool panel is closed";
     }

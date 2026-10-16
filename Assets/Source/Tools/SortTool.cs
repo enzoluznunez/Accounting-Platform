@@ -37,20 +37,25 @@ public class SortTool : Tool
     {
         CompleteOrderSequence();
         CancelDrag();
-        if (sheetManager != null) sheetManager.SuppressNextReflow();
-        Scene.Data?.ResetOrder();
+        DataSource data = Scene.Data;
+        if (data != null)
+        {
+            if (sheetManager != null) sheetManager.WithoutReflow(data.ResetOrder);
+            else data.ResetOrder();
+        }
         RebuildProxies();
     }
 
+    // Deactivating already ran ClearToolState.
     protected override void OnActiveChanged(bool active)
     {
+        if (!active) return;
         CancelDrag();
         RebuildProxies();
     }
 
     protected override void ClearToolState()
     {
-        base.ClearToolState();
         CancelDrag();
         RebuildProxies();
     }
@@ -212,9 +217,8 @@ public class SortTool : Tool
 
         CompleteOrderSequence();
 
-        IReadOnlyList<int> live = columns ? src.ColumnOrder : src.RowOrder;
+        IReadOnlyList<int> live = src.OrderOf(columns);
         var preOrder = new List<int>(live);
-        DataSource.SortMode preMode = columns ? src.ColumnSortMode : src.RowSortMode;
 
         // Plan and walk in block space so a grouped axis steps a whole metric at a
         // time; the recorded order stays line-level, so undo is unchanged.
@@ -230,7 +234,7 @@ public class SortTool : Tool
             if (preBlocks[i] != targetBlocks[i]) changed++;
         LastReorderedLines = changed;
 
-        ManageDatasets.ActiveEdits.PushReorder(columns, preOrder, preMode, changed);
+        ManageDatasets.ActiveEdits.PushReorder(columns, preOrder, changed);
         Report($"set the order of {changed} {DataSource.GroupNoun(src, columns)}s");
 
         var final = new List<int>(targetOrder);
@@ -261,8 +265,7 @@ public class SortTool : Tool
 
     private static void Apply(DataSource src, bool columns, IReadOnlyList<int> order)
     {
-        if (columns) src.SetColumnOrder(order, DataSource.SortMode.Manual);
-        else src.SetRowOrder(order, DataSource.SortMode.Manual);
+        src.SetOrder(columns, order);
     }
 
     private struct OrderStep
@@ -293,7 +296,7 @@ public class SortTool : Tool
         for (int i = 0; i < steps.Count; i++)
         {
             OrderStep step = steps[i];
-            IReadOnlyList<int> live = columns ? src.ColumnOrder : src.RowOrder;
+            IReadOnlyList<int> live = src.OrderOf(columns);
             int at = -1;
             for (int b = 0; b * size < live.Count; b++) if (live[b * size] == step.key) { at = b; break; }
             if (at < 0 || at == step.pos) continue;
@@ -319,12 +322,11 @@ public class SortTool : Tool
         if (src == null || from == to) return false;
 
         int size = src.GroupSize(columns);
-        IReadOnlyList<int> order = columns ? src.ColumnOrder : src.RowOrder;
+        IReadOnlyList<int> order = src.OrderOf(columns);
         int blocks = order.Count / size;
         if (from < 0 || from >= blocks || to < 0 || to >= blocks) return false;
 
         var preOrder = new List<int>(order);
-        DataSource.SortMode preMode = columns ? src.ColumnSortMode : src.RowSortMode;
 
         int blockMin = piece == null ? 0 : (columns ? piece.colMin : piece.rowMin) / size;
 
@@ -341,7 +343,7 @@ public class SortTool : Tool
             arrangement = $"; the {noun} now run: {string.Join(", ", names)}";
         }
 
-        ManageDatasets.ActiveEdits.PushSort(columns, preOrder, preMode, from, to);
+        ManageDatasets.ActiveEdits.PushSort(columns, preOrder, from, to);
 
         // The data can still refuse the order; then nothing moved, so there is
         // nothing to undo or report, and the caller restores the layout itself.
@@ -354,7 +356,7 @@ public class SortTool : Tool
 
         Report($"moved {what} from position {from - blockMin + 1} to {to - blockMin + 1}{arrangement}");
 
-        if (StateChannel.UserDriven) StalePositions.MarkDirty(columns);
+        StalePositions.MarkDirty(columns);
         return true;
     }
 

@@ -180,9 +180,7 @@ public class ProfileTool : Tool
 
         DataSource data = Scene.Data;
         int line = columns ? visCol : visRow;
-        string label = columns && data != null && data.IsGrouped(true)
-            ? DataSource.GroupLabelAt(data, true, data.GroupOf(true, line))
-            : DataSource.LabelAt(data, columns, line);
+        string label = DataSource.GroupLabelAt(data, columns, data != null ? data.GroupOf(columns, line) : line);
         Report($"projected {label}");
         return true;
     }

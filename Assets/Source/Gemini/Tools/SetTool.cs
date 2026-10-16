@@ -18,7 +18,7 @@ public sealed class SetTool : AgenticTool<SetTool.Args> {
     };
 
     protected override void Run(Args args, Dictionary<string, object> result) {
-        if (!TryParseTool(args.tool, out var tool)) {
+        if (!System.Enum.TryParse(args.tool, true, out ToolType tool)) {
             result["error"] = $"Unknown tool '{args.tool}'.";
             return;
         }

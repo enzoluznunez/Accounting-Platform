@@ -285,13 +285,13 @@ public class FilterTool : Tool
 
     // A company is one row and a metric one column group; past that the two
     // axes filter the same way, so everything below takes the axis as 'rows'.
-    private static List<int> InOrder(DataSource data, bool rows) =>
+    internal static List<int> InOrder(DataSource data, bool rows) =>
         rows ? data.DataRowsInOrder() : data.DataGroupsInOrder();
 
-    private static List<int> HiddenOf(DataSource data, bool rows) =>
+    internal static List<int> HiddenOf(DataSource data, bool rows) =>
         rows ? data.HiddenRowsInOrder() : data.HiddenGroupsInOrder();
 
-    private static bool IsHidden(DataSource data, bool rows, int id) =>
+    internal static bool IsHidden(DataSource data, bool rows, int id) =>
         rows ? data.IsRowHidden(id) : data.IsDataGroupHidden(id);
 
     private void OnLineClicked(bool rows, int id)
@@ -332,6 +332,11 @@ public class FilterTool : Tool
         List<int> after = HiddenOf(data, rows);
         ManageDatasets.ActiveEdits.PushFilter(before, after, rows);
 
+        // Every line after one taken off or put back moves up or down a place,
+        // so positions the assistant read before this no longer hold. Metrics
+        // are the columns.
+        StalePositions.MarkDirty(!rows);
+
         Light();
         Report(Describe(data, before, after, rows));
         return true;
@@ -361,7 +366,7 @@ public class FilterTool : Tool
         return $"{what}, leaving {showing} of {total} showing";
     }
 
-    private static string Label(DataSource data, int index, bool rows) =>
+    internal static string Label(DataSource data, int index, bool rows) =>
         rows ? DataSource.RowLabelOfData(data, index) : DataSource.GroupLabelOfData(data, index);
 
     private static string Summarize(List<string> names, string noun)
@@ -408,6 +413,19 @@ public class FilterTool : Tool
         string wanted = query.Trim();
         List<int> all = InOrder(data, rows);
 
+        // A number is a position, the way every other tool reads one, and is
+        // never matched as part of a name: '3' must not pick out '3M Co'.
+        if (int.TryParse(wanted, out int position))
+        {
+            if (position < 1) return false;
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (IsHidden(data, rows, all[i])) continue;
+                if (--position == 0) { id = all[i]; return true; }
+            }
+            return false;
+        }
+
         for (int i = 0; i < all.Count; i++)
             if (string.Equals(Label(data, all[i], rows), wanted, System.StringComparison.OrdinalIgnoreCase))
             {
@@ -423,14 +441,6 @@ public class FilterTool : Tool
             hits++;
         }
         if (hits == 1) { id = only; return true; }
-        if (hits > 1) return false;
-
-        if (!int.TryParse(wanted, out int position) || position < 1) return false;
-        for (int i = 0; i < all.Count; i++)
-        {
-            if (IsHidden(data, rows, all[i])) continue;
-            if (--position == 0) { id = all[i]; return true; }
-        }
         return false;
     }
 

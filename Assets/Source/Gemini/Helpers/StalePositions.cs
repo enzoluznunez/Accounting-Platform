@@ -6,8 +6,10 @@ public static class StalePositions
     [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics() => ClearAll();
 
+    // Only the user's own changes leave the assistant's positions out of date.
     public static void MarkDirty(bool columns)
     {
+        if (StateChannel.InAgentCall) return;
         if (columns) colsDirty = true;
         else rowsDirty = true;
     }

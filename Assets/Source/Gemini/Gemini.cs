@@ -112,19 +112,15 @@ public static class Gemini {
     }
 
     private static Task<string> loadApiKey() {
-        var path = Application.streamingAssetsPath + "/gemini.key";
-        if (!path.Contains("://"))
-            path = "file://" + path;
-
         var tcs = new TaskCompletionSource<string>();
-        var req = UnityWebRequest.Get(path);
+        var req = UnityWebRequest.Get(StreamingAssets.Url("gemini.key"));
         var op = req.SendWebRequest();
         op.completed += _ => {
             if (req.result == UnityWebRequest.Result.Success) {
                 tcs.SetResult(req.downloadHandler.text.Trim());
             }
             else {
-                Debug.LogError($"[Gemini] Failed to load API key from {path}: {req.error}");
+                Debug.LogError($"[Gemini] Failed to load API key from {req.url}: {req.error}");
                 tcs.SetResult("");
             }
             req.Dispose();
@@ -753,12 +749,14 @@ public static class Gemini {
             if (outTx.Finished == true) FlushUtterance(outTranscript, false);
         }
 
-        if (content.Interrupted == true) {
+        // An interruption can arrive in the same message as the turn's end, so
+        // it only stops the audio here; the turn-end handling below still runs.
+        bool interrupted = content.Interrupted == true;
+        if (interrupted) {
             generationActive = false;
             NoteProtocol("<- interrupted");
             Speaker.flush();
             FlushUtterance(outTranscript, false);
-            return;
         }
 
         if (content.TurnComplete == true) {
@@ -773,13 +771,20 @@ public static class Gemini {
             pendingUserFlush = false;
             lastUserText = null;
             Interlocked.Exchange(ref toolRoundsThisTurn, 0);
-            AgentTurn.Clear();
-            if (ConsumeShutdownRequest())
-                _ = MainThread.Run(() => {
-                    var watch = Scene.Assistant;
-                    if (watch != null) watch.SetGeminiActive(false, AssistantCause.Agent);
-                });
+
+            // This runs on the receive thread, and AgentTurn's state is read and
+            // written by tool calls on the main thread, so it is cleared there.
+            // The queue runs in order, so the next turn's calls see it cleared.
+            bool shutdown = ConsumeShutdownRequest();
+            _ = MainThread.Run(() => {
+                AgentTurn.Clear();
+                if (!shutdown) return;
+                var watch = Scene.Assistant;
+                if (watch != null) watch.SetGeminiActive(false, AssistantCause.Agent);
+            });
         }
+
+        if (interrupted) return;
 
         var parts = content.ModelTurn?.Parts;
         if (parts == null) return;

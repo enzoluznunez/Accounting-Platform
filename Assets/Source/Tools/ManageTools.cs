@@ -16,14 +16,14 @@ public class ManageTools : MonoBehaviour
 
     private void Start()
     {
-        if (sheetManager == null) sheetManager = FindAnyObjectByType<ManageSheets>();
+        if (sheetManager == null) sheetManager = Scene.Sheets;
     }
 
     private static bool UserDriven => StateChannel.UserDriven;
 
     public void SelectTool(ToolType tool)
     {
-        if (UserDriven) AgentTurn.UserTookControl("tool changed");
+        if (UserDriven) AgentTurn.UserTookControl();
         ToolType next = SelectedTool == tool ? ToolType.None : tool;
         if (next == SelectedTool) return;
 
@@ -34,7 +34,7 @@ public class ManageTools : MonoBehaviour
 
     public void DeselectTool()
     {
-        if (UserDriven) AgentTurn.UserTookControl("tool deselected");
+        if (UserDriven) AgentTurn.UserTookControl();
         if (SelectedTool == ToolType.None) return;
 
         SelectedTool = ToolType.None;
@@ -70,8 +70,19 @@ public class ManageTools : MonoBehaviour
         if (sheetManager != null) sheetManager.SyncProjectionToStack();
     }
 
-    private static bool TryEditKindOf(ToolType tool, out EditKind kind) =>
-        Enum.TryParse(tool.ToString(), out kind);
+    private static bool TryEditKindOf(ToolType tool, out EditKind kind)
+    {
+        switch (tool)
+        {
+            case ToolType.Filter: kind = EditKind.Filter; return true;
+            case ToolType.Move: kind = EditKind.Move; return true;
+            case ToolType.Sort: kind = EditKind.Sort; return true;
+            case ToolType.Rotate: kind = EditKind.Rotate; return true;
+            case ToolType.Scale: kind = EditKind.Scale; return true;
+            case ToolType.Profile: kind = EditKind.Profile; return true;
+            default: kind = default; return false;
+        }
+    }
 
     private ManageSheets.UndoResult UndoTop(out string kindName)
     {
@@ -98,14 +109,23 @@ public class ManageTools : MonoBehaviour
 
         int inGroup = ManageDatasets.ActiveEdits.TopGroupSize();
 
-        bool sortRows = false, sortColumns = false;
+        // A sort reorders lines and a filter takes some away or puts them back;
+        // undoing either shifts the positions the assistant last read.
+        bool sortRows = false, sortColumns = false, filterRows = false, filterColumns = false;
         for (int i = ManageDatasets.ActiveEdits.Count - inGroup; i < ManageDatasets.ActiveEdits.Count; i++)
         {
             if (i < 0) continue;
             Edit rec = ManageDatasets.ActiveEdits[i];
-            if (rec.kind != EditKind.Sort) continue;
-            if (rec.reorderIsColumn) sortColumns = true;
-            else sortRows = true;
+            if (rec.kind == EditKind.Sort)
+            {
+                if (rec.reorderIsColumn) sortColumns = true;
+                else sortRows = true;
+            }
+            else if (rec.kind == EditKind.Filter)
+            {
+                if (rec.filterIsRow) filterRows = true;
+                else filterColumns = true;
+            }
         }
 
         // An animated sort anywhere in the group must stop before its record is
@@ -122,12 +142,9 @@ public class ManageTools : MonoBehaviour
             case ManageSheets.UndoResult.Applied:
                 for (int i = 1; i < inGroup; i++)
                     if (UndoTop(out _) == ManageSheets.UndoResult.Unreachable) break;
-                if (UserDriven)
-                {
-                    if (sortRows) StalePositions.MarkDirty(false);
-                    if (sortColumns) StalePositions.MarkDirty(true);
-                }
-                StateChannel.Record("Undo", inGroup > 1
+                if (sortRows || filterRows) StalePositions.MarkDirty(false);
+                if (sortColumns || filterColumns) StalePositions.MarkDirty(true);
+                StateChannel.Record(inGroup > 1
                     ? $"undid the {kindName} edit ({inGroup} steps, one action)"
                     : $"undid the {kindName} edit");
                 break;
@@ -147,9 +164,12 @@ public class ManageTools : MonoBehaviour
     {
         int had = ManageDatasets.ActiveEdits.Count;
 
-        bool hadSort = false;
+        bool shifted = false;
         for (int i = 0; i < had; i++)
-            if (ManageDatasets.ActiveEdits[i].kind == EditKind.Sort) { hadSort = true; break; }
+        {
+            EditKind kind = ManageDatasets.ActiveEdits[i].kind;
+            if (kind == EditKind.Sort || kind == EditKind.Filter) { shifted = true; break; }
+        }
 
         for (int i = 0; i < had && ManageDatasets.ActiveEdits.Peek() != null; i++)
             if (UndoTop(out _) == ManageSheets.UndoResult.Unreachable) break;
@@ -159,11 +179,11 @@ public class ManageTools : MonoBehaviour
 
         ManageDatasets.ActiveEdits.Clear();
         if (sheetManager != null) sheetManager.SyncProjectionToStack();
-        if (hadSort && UserDriven)
+        if (shifted)
         {
             StalePositions.MarkDirty(false);
             StalePositions.MarkDirty(true);
         }
-        if (had > 0) StateChannel.Record("Undo", $"undid all {had} edits");
+        if (had > 0) StateChannel.Record($"undid all {had} edits");
     }
 }

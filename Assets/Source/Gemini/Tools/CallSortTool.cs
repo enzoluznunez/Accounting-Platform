@@ -61,13 +61,12 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         var data = Scene.Data;
         if (data == null) { result["error"] = "No data source found in scene."; return; }
 
-        int lineCount = (isColumn ? data.ColumnOrder : data.RowOrder).Count;
+        int lineCount = data.OrderOf(isColumn).Count;
         int count = data.GroupCount(isColumn);
         if (count == 0) { result["error"] = $"The sheet has no {axis} to move."; return; }
 
         result["direction"] = axis;
-        string dataset = ActiveDatasetLabel();
-        if (dataset != null) result["dataset"] = dataset;
+        result["dataset"] = Scene.DatasetLabel;
 
         bool wantsOrder = args.order != null && args.order.Length > 0;
         bool wantsMove = !string.IsNullOrEmpty(args.from) || args.to.HasValue;
@@ -90,7 +89,7 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
             result["error"] = $"Only one reorder can run at a time. Each one shifts the positions of the "
                 + $"{axis} around it, so separate calls do not combine into the arrangement you pictured. "
                 + $"Send one call with 'order' listing the {axis} in the sequence you want.";
-            EchoOrder(data, isColumn, isColumn ? data.ColumnOrder : data.RowOrder, result);
+            EchoOrder(data, isColumn, data.OrderOf(isColumn), result);
             return;
         }
         lastSortRound[axisSlot] = round;
@@ -109,7 +108,7 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
 
         // 'wanted' holds blocks. Emitting each block's lines together keeps the
         // order group-aligned, which is the only shape the dataset will accept.
-        IReadOnlyList<int> live = isColumn ? data.ColumnOrder : data.RowOrder;
+        IReadOnlyList<int> live = data.OrderOf(isColumn);
         int size = data.GroupSize(isColumn);
         var target = new List<int>(lineCount);
         var taken = new HashSet<int>();
@@ -187,7 +186,7 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         // measure over its cells; a single cell reads the same either way.
         string crossMeasure = measure ?? "sum";
 
-        IReadOnlyList<int> live = isColumn ? data.ColumnOrder : data.RowOrder;
+        IReadOnlyList<int> live = data.OrderOf(isColumn);
         var ranked = new List<KeyValuePair<double, int>>(count);
         var unranked = new List<int>();
 
@@ -232,7 +231,7 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
         if (!args.to.HasValue) { result["error"] = "Provide 'to' with 'from'."; return; }
         string what = DataSource.GroupNoun(data, isColumn);
         int size = data.GroupSize(isColumn);
-        var pre = new List<int>(isColumn ? data.ColumnOrder : data.RowOrder);
+        var pre = new List<int>(data.OrderOf(isColumn));
 
         if (!TryResolveLine(args.from, isColumn, 0, pre.Count - 1, result, out int fromPos)) return;
         int toPos = Mathf.Clamp(args.to.Value - 1, 0, count - 1);

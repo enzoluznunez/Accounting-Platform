@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 
 public static class SheetStats
@@ -14,8 +13,6 @@ public static class SheetStats
         public int maxVisRow;
         public int maxVisCol;
         public double mean;
-        public double stdDevPopulation;
-        public double stdDevSample;
         public double sum;
     }
 
@@ -29,8 +26,6 @@ public static class SheetStats
         if (rowOrder == null || colOrder == null) return summary;
 
         double sum = 0.0;
-        double runningMean = 0.0;
-        double squaredDeviation = 0.0;
 
         for (int visRow = rowMin; visRow <= rowMax; visRow++)
         {
@@ -59,10 +54,6 @@ public static class SheetStats
 
                 sum += value;
                 summary.count++;
-
-                double delta = value - runningMean;
-                runningMean += delta / summary.count;
-                squaredDeviation += delta * (value - runningMean);
             }
         }
 
@@ -70,10 +61,6 @@ public static class SheetStats
 
         summary.sum = sum;
         summary.mean = sum / summary.count;
-        summary.stdDevPopulation = Math.Sqrt(squaredDeviation / summary.count);
-        summary.stdDevSample = summary.count > 1
-            ? Math.Sqrt(squaredDeviation / (summary.count - 1))
-            : double.NaN;
         summary.valid = true;
         return summary;
     }

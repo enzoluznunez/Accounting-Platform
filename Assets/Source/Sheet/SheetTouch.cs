@@ -58,8 +58,7 @@ public class SheetTouch : MonoBehaviour
 
     private void Rescan()
     {
-        if (Time.unscaledTime < _nextScan && _pokes.Count > 0) return;
-        _nextScan = Time.unscaledTime + Mathf.Max(rescanSeconds, 0.25f);
+        if (Time.unscaledTime < _nextScan) return;
 
         _pokes.Clear();
 
@@ -70,6 +69,9 @@ public class SheetTouch : MonoBehaviour
             if (hand == null) continue;
             _pokes.Add(new Source { poke = found[i], hand = hand });
         }
+
+        // Until a hand turns up, look again soon rather than every frame.
+        _nextScan = Time.unscaledTime + (_pokes.Count > 0 ? Mathf.Max(rescanSeconds, 0.25f) : 0.25f);
     }
 
     private bool Live(Source source)

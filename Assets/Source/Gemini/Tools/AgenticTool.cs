@@ -39,11 +39,11 @@ public abstract class AgenticTool : Function {
         await MainThread.Run(() => {
             var run = System.Diagnostics.Stopwatch.StartNew();
             Profiler.BeginSample(sample);
-            StateChannel.InAgentCall = true;
+            StateChannel.EnterAgentCall();
             try {
                 AgentTurn.NoteToolCall();
                 Scene.Sort?.CompleteOrderSequence();
-                editsBefore = ManageDatasets.ActiveEdits != null ? ManageDatasets.ActiveEdits.Count : 0;
+                editsBefore = ManageDatasets.ActiveEdits.Count;
                 refreshedAxes = 0;
                 Run(args ?? new Dictionary<string, object>(), result);
             }
@@ -56,8 +56,8 @@ public abstract class AgenticTool : Function {
                     if ((refreshedAxes & 1) != 0) StalePositions.Clear(false);
                     if ((refreshedAxes & 2) != 0) StalePositions.Clear(true);
                 }
-                editsAfter = ManageDatasets.ActiveEdits != null ? ManageDatasets.ActiveEdits.Count : 0;
-                StateChannel.InAgentCall = false;
+                editsAfter = ManageDatasets.ActiveEdits.Count;
+                StateChannel.ExitAgentCall();
                 string did = StateChannel.TakeAgentBatch();
                 if (!string.IsNullOrEmpty(did)) result["did"] = did;
                 Profiler.EndSample();
@@ -348,21 +348,6 @@ public abstract class AgenticTool : Function {
         return (decimal)Math.Round(v, 4);
     }
 
-    protected static bool TryParseTool(string s, out ToolType tool) {
-        tool = ToolType.None;
-        if (string.IsNullOrEmpty(s)) return false;
-        switch (s.Trim().ToLowerInvariant()) {
-            case "none": tool = ToolType.None; return true;
-            case "filter": tool = ToolType.Filter; return true;
-            case "move": case "grab": tool = ToolType.Move; return true;
-            case "rotate": tool = ToolType.Rotate; return true;
-            case "scale": tool = ToolType.Scale; return true;
-            case "sort": tool = ToolType.Sort; return true;
-            case "profile": tool = ToolType.Profile; return true;
-        }
-        return false;
-    }
-
     protected readonly struct PiecePose {
         public readonly UnityEngine.Vector3 pos;
         public readonly UnityEngine.Quaternion rot;
@@ -478,40 +463,23 @@ public abstract class AgenticTool : Function {
         return false;
     }
 
-    private struct MeasureAcc {
-        private double sum, best, worst;
-        private int n;
-
-        public void Add(double v) {
-            if (n == 0) { best = v; worst = v; }
-            else { if (v > best) best = v; if (v < worst) worst = v; }
-            sum += v;
-            n++;
-        }
-
-        public bool TryScore(string measure, out double score) {
-            score = 0d;
-            if (n == 0) return false;
-            switch (measure) {
-                case "sum": score = sum; return true;
-                case "average": score = sum / n; return true;
-                case "max": score = best; return true;
-                case "min": score = worst; return true;
-                default: return false;
-            }
-        }
-    }
-
     protected static bool TryLineMeasure(DataSource data, bool isColumn, int line,
         int crossMin, int crossMax, string measure, out double score) {
 
-        var acc = new MeasureAcc();
-        for (int j = crossMin; j <= crossMax; j++)
-            if (TryCellValue(data, isColumn ? j : line, isColumn ? line : j, out double v)) acc.Add(v);
-        return acc.TryScore(measure, out score);
+        score = 0d;
+        SheetStats.Summary s = isColumn
+            ? SheetStats.Over(data, crossMin, crossMax, line, line)
+            : SheetStats.Over(data, line, line, crossMin, crossMax);
+        if (!s.valid) return false;
+        switch (measure) {
+            case "sum": score = s.sum; return true;
+            case "average": score = s.mean; return true;
+            case "max": score = s.max; return true;
+            case "min": score = s.min; return true;
+            default: return false;
+        }
     }
 
-    protected static string ActiveDatasetLabel() => Scene.DatasetLabel;
 }
 
 public abstract class AgenticTool<TArgs> : AgenticTool where TArgs : class, new() {

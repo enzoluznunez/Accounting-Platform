@@ -15,7 +15,7 @@ public static class Notices
 
     public static void Show(MonoBehaviour host, string title, string message)
     {
-        StateChannel.Record("Notice", message);
+        StateChannel.Record(message);
 
         if (Time.frameCount == _lastToastFrame) return;
         _lastToastFrame = Time.frameCount;

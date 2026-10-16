@@ -13,7 +13,7 @@ public abstract class Tool : MonoBehaviour
 
     protected abstract ToolType Kind { get; }
 
-    protected void Report(string what) => StateChannel.Record(Kind.ToString(), what);
+    protected void Report(string what) => StateChannel.Record(what);
 
     protected virtual bool UsesSheetEvents => false;
 
@@ -79,11 +79,11 @@ public abstract class Tool : MonoBehaviour
 
     protected virtual void Start()
     {
-        if (toolManager == null) toolManager = FindAnyObjectByType<ManageTools>();
-        if (sheetManager == null) sheetManager = FindAnyObjectByType<ManageSheets>();
+        if (toolManager == null) toolManager = Scene.Tools;
+        if (sheetManager == null) sheetManager = Scene.Sheets;
         if (readSheets == null && sheetManager != null) readSheets = sheetManager.GetComponent<ReadSheets>();
-        if (readSheets == null) readSheets = FindAnyObjectByType<ReadSheets>();
-        if (toolPanelUI == null) toolPanelUI = FindAnyObjectByType<ToolPanelUI>();
+        if (readSheets == null) readSheets = Scene.Reader;
+        if (toolPanelUI == null) toolPanelUI = Scene.ToolPanel;
 
         OnToolStart();
         BuildPanelContent();

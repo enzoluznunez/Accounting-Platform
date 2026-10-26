@@ -1,5 +1,7 @@
 # Accounting Platform
 
+https://github.com/user-attachments/assets/47bce46d-f64a-406f-beef-098255fdd9ae
+
 A data visualization app for Meta Quest 3, built in Unity. Sheets of company
 financials stand in front of you in passthrough, one industry at a time or all of
 them at once, and you reshape them with your hands. A voice assistant, Ada, can

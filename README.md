@@ -15,9 +15,6 @@ drive the same tools when asked.
 ![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-<!-- TODO: add screenshot or GIF of a sheet in passthrough, e.g. docs/images/hero.gif -->
-<!-- ![A sheet of company financials in passthrough on Meta Quest 3](docs/images/hero.gif) -->
-
 - [What You Can Do](#what-you-can-do)
 - [What's in the Repository](#whats-in-the-repository)
 - [Tech Stack](#tech-stack)

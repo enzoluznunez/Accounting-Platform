@@ -5,11 +5,24 @@ financials stand in front of you in passthrough, one industry at a time or all o
 them at once, and you reshape them with your hands. A voice assistant, Ada, can
 drive the same tools when asked.
 
+[![pipeline](https://github.com/enzoluznunez/Accounting-Platform/actions/workflows/pipeline.yml/badge.svg)](https://github.com/enzoluznunez/Accounting-Platform/actions/workflows/pipeline.yml)
+![Unity 6000.4.0f1](https://img.shields.io/badge/Unity-6000.4.0f1-black?logo=unity)
+![Meta Quest 3](https://img.shields.io/badge/Meta%20Quest-3-1c1e20?logo=meta)
+![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+<!-- TODO: add screenshot or GIF of a sheet in passthrough, e.g. docs/images/hero.gif -->
+<!-- ![A sheet of company financials in passthrough on Meta Quest 3](docs/images/hero.gif) -->
+
 - [What You Can Do](#what-you-can-do)
 - [What's in the Repository](#whats-in-the-repository)
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
 - [Getting Started](#getting-started)
 - [Using the App](#using-the-app)
 - [FAQ](#faq)
+- [Status](#status)
+- [License](#license)
 
 ## What You Can Do
 
@@ -38,6 +51,38 @@ two years, or switch industries.
 | `pipeline/` | The Python side: rebuilds the MongoDB database from the raw export in S3 (48,429 rows, cleaned to 1,249 companies across fiscal 2019–2020) and serves it as an API on AWS Lambda. See `pipeline/README.md`. |
 
 The app ships no data. Every sheet is fetched from the API when it is opened.
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Headset app | Unity 6 (6000.4.0f1), C#, Universal Render Pipeline, OpenXR |
+| XR | Meta XR Core SDK, Meta Interaction SDK (hand tracking, poke and grab), MR Utility Kit (passthrough and scene data) |
+| Voice assistant | Google Gemini Live API (`gemini-3.1-flash-live-preview`) through the Google Gen AI .NET SDK, with function calling for the sheet tools |
+| API | Python 3.13, FastAPI, Mangum, on AWS Lambda (arm64) behind a Function URL, deployed with AWS SAM |
+| Data | MongoDB Atlas, built from an export in Amazon S3 with pandas; secrets in AWS Systems Manager Parameter Store |
+| Quality | pytest (unit, integration and regression suites), ruff, GitHub Actions |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Headset["Meta Quest 3 (Unity app)"]
+        Hands["Hand tools<br/>Filter · Sort · Profile · Move/Rotate/Scale"]
+        Ada["Ada voice assistant"]
+        Sheet["Sheet renderer"]
+        Hands --> Sheet
+        Ada --> Sheet
+    end
+    Ada <-->|"audio + tool calls"| Gemini["Google Gemini Live API"]
+    Sheet -->|"HTTPS + X-Api-Key"| API["FastAPI on AWS Lambda"]
+    API --> Mongo[("MongoDB Atlas")]
+    S3[("Raw export in S3")] -->|"pipeline/rebuild.py<br/>clean → ratios → publish"| Mongo
+```
+
+- **The app** asks the API for `/industries` at startup and fetches each sheet from `/sheet` when it is opened. Hand tools and Ada both edit the open sheet.
+- **Ada** streams microphone audio and the sheet's state to the Gemini Live API and acts by calling tools (filter, sort, profile, place, query) that the app exposes.
+- **The pipeline** rebuilds the database from the raw export in one run (`clean.py` → `ratios.py` → `publish.py`). `metrics.py` is the single list of ratios and categories that every stage, the API and the generated C# contract (`FinancialsContract.g.cs`) read from.
 
 ## Getting Started
 
@@ -301,3 +346,15 @@ Messages from the app start with tags such as `[IndustryCatalog]` (the database)
 
 **Who do I ask for help?**
 The project owner, who also holds `api.key` and access to the database and AWS account.
+
+## Status
+
+Complete. Version 1.0 is feature-complete for its purpose: exploring fiscal
+2019–2020 ratios for 1,249 public companies on Meta Quest 3. No further
+features are planned.
+
+## License
+
+Released under the [MIT License](LICENSE). Third-party SDKs under `Assets/`
+(Meta XR, TextMesh Pro, and the NuGet packages in `Assets/Packages/`) keep
+their own licenses.

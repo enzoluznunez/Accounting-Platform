@@ -1,5 +1,5 @@
 {
-    "name": "Study.Runtime",
+    "name": "AccountingPlatform.Runtime",
     "rootNamespace": "",
     "references": [
         "Oculus.VR",

@@ -32,7 +32,7 @@ two years, or switch industries.
 | Path | What it holds |
 |---|---|
 | `Assets/Source/` | The app's C# code: `Main` starts the scene and camera rig, `Data` fetches and holds sheets, `Sheet` draws them, `Tools` and `UI` are the hand interface, `InteractionAPI` holds the hand poses, `Audio` wraps the native microphone and speaker plugins, `Poster` builds the figures `Assets/Editor/PosterCapture.cs` renders for the poster, and `Gemini` is the voice assistant and the tools it calls. |
-| `Assets/Scenes/File Reader.unity` | The one scene the app runs. |
+| `Assets/Scenes/Main.unity` | The one scene the app runs. |
 | `Assets/StreamingAssets/` | Where your key files go (see [Configure the Project](#configure-the-project)). |
 | `Assets/Settings/Build Profiles/Quest Default.asset` | The build profile for the headset. |
 | `pipeline/` | The Python side: rebuilds the MongoDB database from the raw export in S3 (48,429 rows, cleaned to 1,249 companies across fiscal 2019–2020) and serves it as an API on AWS Lambda. See `pipeline/README.md`. |
@@ -68,7 +68,7 @@ The app ships no data. Every sheet is fetched from the API when it is opened.
 1. Clone the repository, or download the ZIP and unpack it.
 2. In Unity Hub choose **Add → Add project from disk**, select the cloned folder, and open
    it with 6000.4.0f1. The first import takes several minutes.
-3. Open `Assets/Scenes/File Reader.unity`.
+3. Open `Assets/Scenes/Main.unity`.
 
 ### Configure the Project
 

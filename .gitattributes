@@ -1,0 +1,23 @@
+# Unity YAML assets: merge with Unity's Smart Merge (UnityYAMLMerge) when configured
+*.unity    merge=unityyamlmerge
+*.prefab   merge=unityyamlmerge
+*.asset    merge=unityyamlmerge
+*.mat      merge=unityyamlmerge
+*.meta     merge=unityyamlmerge
+*.controller merge=unityyamlmerge
+*.anim     merge=unityyamlmerge
+
+# Binary assets
+*.so   binary
+*.dll  binary
+*.ttf  binary
+*.png  binary
+*.jpg  binary
+
+# Third-party code: exclude from GitHub language statistics
+Assets/Packages/**        linguist-vendored
+Assets/Oculus/**          linguist-vendored
+Assets/InteractionSDK/**  linguist-vendored
+Assets/TextMesh[[:space:]]Pro/** linguist-vendored
+Assets/NuGet/**           linguist-vendored
+Assets/Source/Gemini/Tools/FinancialsContract.g.cs linguist-generated

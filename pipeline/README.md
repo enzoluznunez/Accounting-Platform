@@ -8,6 +8,10 @@ documents MongoDB Atlas holds, and the API serves them. Settings live in
 in (the Atlas admin user, since rebuilding writes). Reading the export needs an
 AWS login: `aws sso login --profile nasba`.
 
+`nasba` is the project's internal name. It names the database, the AWS
+profile, the SAM stack and the Parameter Store paths, and is kept as is so the
+deployed resources keep working.
+
 ## Rebuilding the data
 
 ```sh

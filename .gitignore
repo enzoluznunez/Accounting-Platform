@@ -5,7 +5,6 @@
 .utmp/
 /[Ll]ibrary/
 /[Tt]emp/
-/[Oo]bj/
 /[Bb]uild/
 /[Bb]uilds/
 /[Ll]ogs/
@@ -80,15 +79,15 @@ crashlytics-build.properties
 # TestRunner generated files
 InitTestScene*.unity*
 
-# Gemini API key (never commit secrets)
+# Secrets: API keys read at runtime from StreamingAssets (never commit)
 /[Aa]ssets/StreamingAssets/gemini.key
 /[Aa]ssets/StreamingAssets/gemini.key.meta
+/[Aa]ssets/StreamingAssets/api.key
+/[Aa]ssets/StreamingAssets/api.key.meta
 
 # Where this machine's financial API lives (differs per machine)
 /[Aa]ssets/StreamingAssets/api.url
 /[Aa]ssets/StreamingAssets/api.url.meta
-/[Aa]ssets/StreamingAssets/api.key
-/[Aa]ssets/StreamingAssets/api.key.meta
 
 # Addressables default ignores, before user customizations
 /ServerData
@@ -115,6 +114,8 @@ InitTestScene*.unity*
 .claude/
 
 .DS_Store
+Thumbs.db
+Desktop.ini
 ProjectSettings/AI.Assistant/
 
 # Build intermediates and local captures
@@ -131,6 +132,7 @@ ProjectSettings/AI.Assistant/
 # Python pipeline
 /pipeline/.venv/
 __pycache__/
+*.py[cod]
 .pytest_cache/
 /pipeline/.coverage
 # Connection strings and keys; .env.example shows the shape

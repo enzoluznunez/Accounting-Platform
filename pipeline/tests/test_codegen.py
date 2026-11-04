@@ -2,7 +2,6 @@
 languages. These tests fail if the generated file, or the tool that consumes it,
 drifts from the OpenAPI schema."""
 
-from pathlib import Path
 
 import codegen
 from metrics import CATEGORIES, DEFAULT_METRICS, FUNDAMENTALS, RATIOS, UNIT_NOTE

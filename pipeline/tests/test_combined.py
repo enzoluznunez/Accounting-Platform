@@ -10,7 +10,7 @@ filtering by industry from coming back empty."""
 import pytest
 
 import sheetcsv
-from metrics import CATEGORIES, DIVISION_NAMES, RATIOS, SHEET_LIMIT, YEARS, division
+from metrics import CATEGORIES, DIVISION_NAMES, RATIOS, YEARS, division
 
 
 def names_on(text):

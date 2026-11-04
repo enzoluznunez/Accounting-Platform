@@ -12,8 +12,8 @@ import database
 import sheetcsv
 from metrics import (
     CATEGORIES,
-    DIVISION_NAMES,
     DEFAULT_METRICS,
+    DIVISION_NAMES,
     FUNDAMENTALS,
     LIMIT_MAXIMUM,
     LIMIT_MINIMUM,
@@ -24,7 +24,6 @@ from metrics import (
     UNIT_NOTE,
     UNITS,
     YEARS,
-    category_of,
 )
 
 # The metric surface. A request can name these columns and nothing else, so the

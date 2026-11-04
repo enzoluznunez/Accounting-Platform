@@ -1,0 +1,38 @@
+name: pipeline
+
+on:
+  push:
+    branches: [main]
+    paths: ["pipeline/**", ".github/workflows/pipeline.yml"]
+  pull_request:
+    paths: ["pipeline/**", ".github/workflows/pipeline.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13" # matches the Lambda runtime
+          cache: pip
+          cache-dependency-path: pipeline/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt ruff
+
+      - name: Lint
+        run: ruff check --output-format=github .
+
+      # The full suite rebuilds a test database from the S3 export, so it needs
+      # AWS and MongoDB Atlas credentials and runs locally (see pipeline/README.md).
+      # Here, collecting every test catches import errors and broken test modules.
+      - name: Collect tests
+        run: pytest --collect-only -q

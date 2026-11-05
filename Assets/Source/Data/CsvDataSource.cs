@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
 
-public class Parser : DataSource
+public class CsvDataSource : DataSource
 {
     public Action<bool, string> onLoadResult;
 
@@ -54,7 +54,7 @@ public class Parser : DataSource
 
             if (www.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
             {
-                Debug.LogError($"[Parser:{name}] Failed to load CSV from {url}: {www.error}");
+                Debug.LogError($"[CsvDataSource:{name}] Failed to load CSV from {url}: {www.error}");
                 Fail("That dataset could not be reached.");
                 yield break;
             }
@@ -128,7 +128,7 @@ public class Parser : DataSource
 
         if (groupSize > 1 && _columnTitles.Count % groupSize != 0)
         {
-            Debug.LogWarning($"[Parser:{name}] '#group {groupSize}' does not divide the " +
+            Debug.LogWarning($"[CsvDataSource:{name}] '#group {groupSize}' does not divide the " +
                              $"{_columnTitles.Count} columns; loading them ungrouped.");
             groupSize = 1;
         }
@@ -150,7 +150,7 @@ public class Parser : DataSource
 
         int skipped = sourceRows - rows.Count;
         if (skipped > 0)
-            Debug.LogWarning($"[Parser:{name}] Skipped {skipped} row(s) shorter than the {header.Count}-column header.");
+            Debug.LogWarning($"[CsvDataSource:{name}] Skipped {skipped} row(s) shorter than the {header.Count}-column header.");
 
         int rowCount = rows.Count;
         int colCount = _columnTitles.Count;
@@ -180,14 +180,14 @@ public class Parser : DataSource
             return "That dataset has no numeric values.";
         }
 
-        Debug.Log($"[Parser:{name}] Loaded grid {rowCount} rows x {colCount} cols " +
+        Debug.Log($"[CsvDataSource:{name}] Loaded grid {rowCount} rows x {colCount} cols " +
                   $"({ColumnGroupSize} col(s) per group, normalised range [{_globalMin}, {_globalMax}])");
         return null;
     }
 
     private void Fail(string reason)
     {
-        Debug.LogWarning($"[Parser:{name}] {reason}");
+        Debug.LogWarning($"[CsvDataSource:{name}] {reason}");
         ClearGrid();
         RaiseLoadFailed();
         ReportResult(false, reason);
@@ -232,7 +232,7 @@ public class Parser : DataSource
             groupSize = size;
             return;
         }
-        Debug.LogWarning($"[Parser:{name}] Ignored unreadable directive '{line.Trim()}'.");
+        Debug.LogWarning($"[CsvDataSource:{name}] Ignored unreadable directive '{line.Trim()}'.");
     }
 
     private static bool TryBody(string body, string name, out string rest)
@@ -258,7 +258,7 @@ public class Parser : DataSource
 
         if (categories.Count != sourceRows || colors.Count != sourceRows)
         {
-            Debug.LogWarning($"[Parser:{name}] Ignored the industry directives: " +
+            Debug.LogWarning($"[CsvDataSource:{name}] Ignored the industry directives: " +
                              $"{categories.Count} industries and {colors.Count} colors " +
                              $"for {sourceRows} rows.");
             return;

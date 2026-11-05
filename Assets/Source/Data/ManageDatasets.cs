@@ -187,7 +187,7 @@ public class ManageDatasets : MonoBehaviour
         GameObject host = new GameObject($"Dataset_{_datasetsCreated++}");
         host.transform.SetParent(transform, false);
 
-        Parser reader = host.AddComponent<Parser>();
+        CsvDataSource reader = host.AddComponent<CsvDataSource>();
         dataset.source = reader;
 
         reader.onLoadResult = (ok, reason) => OnDatasetLoadResult(reader, ok, reason);
@@ -201,7 +201,7 @@ public class ManageDatasets : MonoBehaviour
         return -1;
     }
 
-    private void OnDatasetLoadResult(Parser reader, bool ok, string reason)
+    private void OnDatasetLoadResult(CsvDataSource reader, bool ok, string reason)
     {
         int index = IndexOfSource(reader);
         if (index < 0) return;

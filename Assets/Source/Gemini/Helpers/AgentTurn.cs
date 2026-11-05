@@ -6,17 +6,17 @@ public static class AgentTurn
     public static bool Marked { get; private set; }
     public static bool UserTookOver { get; private set; }
 
-    private static readonly Dictionary<EditList, int> baselines = new Dictionary<EditList, int>();
+    private static readonly Dictionary<EditList, int> _baselines = new Dictionary<EditList, int>();
 
     public static void NoteToolCall()
     {
         Marked = true;
         EditList edits = ManageDatasets.ActiveEdits;
-        if (!baselines.ContainsKey(edits)) baselines[edits] = edits.Count;
+        if (!_baselines.ContainsKey(edits)) _baselines[edits] = edits.Count;
     }
 
     private static int BaselineOf(EditList edits) =>
-        baselines.TryGetValue(edits, out int start) ? start : edits.Count;
+        _baselines.TryGetValue(edits, out int start) ? start : edits.Count;
 
     public static int AppliedSoFar()
     {
@@ -53,7 +53,7 @@ public static class AgentTurn
     {
         Marked = false;
         UserTookOver = false;
-        baselines.Clear();
+        _baselines.Clear();
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]

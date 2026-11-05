@@ -129,16 +129,16 @@ ProjectSettings/AI.Assistant/
 /[Aa]ssets/_Recovery/
 /[Aa]ssets/_Recovery.meta
 
-# Python pipeline
-/pipeline/.venv/
+# Python backend
+/Backend/.venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
-/pipeline/.coverage
+/Backend/.coverage
 # Connection strings and keys; .env.example shows the shape
-/pipeline/.env
+/Backend/.env
 # sam build output
-/pipeline/.aws-sam/
+/Backend/.aws-sam/
 # Recorded API answers: real data, kept off GitHub
-/pipeline/regression/
+/Backend/regression/
 

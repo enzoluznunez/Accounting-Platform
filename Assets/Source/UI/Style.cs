@@ -96,8 +96,8 @@ public static class Style
     public static readonly Vector2 Button = new Vector2(50f, 25f);
     // The watch carries one button, drawn as a circle: a square tile with a
     // corner radius of half its side.
-    public const float WatchButtonDiameter = 64f;
-    public static readonly Vector2 WatchButton = new Vector2(WatchButtonDiameter, WatchButtonDiameter);
+    public const float HandButtonDiameter = 64f;
+    public static readonly Vector2 HandButton = new Vector2(HandButtonDiameter, HandButtonDiameter);
     public const float TitleBarButtonWidth = 80f;
 
     public const int SortPanels = 0;

@@ -63,11 +63,11 @@ public sealed class Undo : AgenticTool<Undo.Args> {
         int count = 1;
         if (!undoAll && args.count.HasValue) count = args.count.Value < 1 ? 1 : args.count.Value;
 
-        if (args.tool.HasValue && top.kind != args.tool.Value) {
+        if (args.tool.HasValue && top.Kind != args.tool.Value) {
             Refuse(result, "matching newest edit",
-                $"The newest edit is from the {Edit.KindName(top.kind)} tool, not the {Edit.KindName(args.tool.Value)} tool. Undo always " +
+                $"The newest edit is from the {Edit.KindName(top.Kind)} tool, not the {Edit.KindName(args.tool.Value)} tool. Undo always " +
                 "removes the newest edit first. Ask the user which they meant, then call again without 'tool'.");
-            result["nextUndo"] = Edit.KindName(top.kind);
+            result["nextUndo"] = Edit.KindName(top.Kind);
             result["remaining"] = ManageDatasets.ActiveEdits.Count;
             return;
         }
@@ -113,6 +113,6 @@ public sealed class Undo : AgenticTool<Undo.Args> {
         }
         result["remaining"] = ManageDatasets.ActiveEdits.Count;
         var next = ManageDatasets.ActiveEdits.Peek();
-        if (next != null) result["nextUndo"] = Edit.KindName(next.kind);
+        if (next != null) result["nextUndo"] = Edit.KindName(next.Kind);
     }
 }

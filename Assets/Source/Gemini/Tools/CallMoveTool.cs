@@ -48,14 +48,14 @@ public sealed class CallMoveTool : AgenticTool<CallMoveTool.Args> {
             result["note"] = $"The distance was limited to the {MinDistance} to {MaxDistance} meter range; {distance} m was used.";
     }
 
-    private static void Slide(ManageSheets mgr, CreateSheet sheet, string direction,
+    private static void Slide(ManageSheets mgr, SheetPiece sheet, string direction,
         Vector3 worldDelta, Dictionary<string, object> result) {
 
         var pre = ApplyPieceTransform(mgr, sheet, t =>
             t.localPosition += mgr.transform.InverseTransformVector(worldDelta));
 
         mgr.GetCommittedPose(sheet, out Vector3 nowPos, out _, out _);
-        float actual = mgr.transform.TransformVector(nowPos - pre.pos).magnitude;
+        float actual = mgr.transform.TransformVector(nowPos - pre.Pos).magnitude;
         result["moved"] = direction;
         result["actualMeters"] = Round(actual);
     }

@@ -9,7 +9,7 @@ public abstract class PanelUI : MonoBehaviour
 {
     public float zOffsetFromCamera = 0.45f;
 
-    [SerializeField] private Collider grabCollider;
+    [SerializeField] private Collider _grabCollider;
 
     private Transform _grabPivot;
 
@@ -139,7 +139,7 @@ public abstract class PanelUI : MonoBehaviour
 
     private void SetGrabbable(bool on)
     {
-        if (grabCollider != null) grabCollider.enabled = on;
+        if (_grabCollider != null) _grabCollider.enabled = on;
     }
 
     private RectTransform[] _grabRects;
@@ -225,7 +225,7 @@ public abstract class PanelUI : MonoBehaviour
 
         if (!_grabBoundsDirty || !IsVisible) return;
 
-        if (_grabRects == null || !(grabCollider is BoxCollider))
+        if (_grabRects == null || !(_grabCollider is BoxCollider))
         {
             _grabBoundsDirty = false;
             return;
@@ -236,7 +236,7 @@ public abstract class PanelUI : MonoBehaviour
 
     protected bool RefreshGrabBounds(params RectTransform[] rects)
     {
-        BoxCollider box = grabCollider as BoxCollider;
+        BoxCollider box = _grabCollider as BoxCollider;
         if (box == null) return false;
 
         Transform space = box.transform;

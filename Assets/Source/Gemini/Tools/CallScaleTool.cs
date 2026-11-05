@@ -45,7 +45,7 @@ public sealed class CallScaleTool : AgenticTool<CallScaleTool.Args> {
 
         var pre = ApplyPieceTransform(mgr, sheet, resize);
 
-        float before = pre.scale.x;
+        float before = pre.Scale.x;
         mgr.GetCommittedPose(sheet, out _, out _, out Vector3 nowScale);
         float after = nowScale.x;
 

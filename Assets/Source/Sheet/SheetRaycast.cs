@@ -4,11 +4,11 @@ public static class SheetRaycast
 {
     public struct Hit
     {
-        public bool valid;
-        public CreateCube cube;
-        public Vector3 point;
-        public Vector3 normal;
-        public float distance;
+        public bool Valid;
+        public SheetCube Cube;
+        public Vector3 Point;
+        public Vector3 Normal;
+        public float Distance;
     }
 
     private const int MaxBuffer = 4096;
@@ -26,7 +26,7 @@ public static class SheetRaycast
         for (int i = 0; i < count; i++)
         {
             Collider candidate = _overlaps[i];
-            if (candidate == null || !candidate.TryGetComponent(out CreateCube cube)) continue;
+            if (candidate == null || !candidate.TryGetComponent(out SheetCube cube)) continue;
 
             Vector3 closest = candidate.ClosestPoint(point);
             float distance = Vector3.Distance(closest, point);
@@ -35,18 +35,18 @@ public static class SheetRaycast
             best = distance;
             hit = new Hit
             {
-                valid = true,
-                cube = cube,
-                point = closest,
-                normal = distance > 1e-5f ? (point - closest).normalized : Vector3.up,
-                distance = distance
+                Valid = true,
+                Cube = cube,
+                Point = closest,
+                Normal = distance > 1e-5f ? (point - closest).normalized : Vector3.up,
+                Distance = distance
             };
         }
 
-        return hit.valid;
+        return hit.Valid;
     }
 
-    public static bool Contains(CreateCube cube, Vector3 point)
+    public static bool Contains(SheetCube cube, Vector3 point)
     {
         Collider box = cube != null ? cube.Collider : null;
         if (box == null || !box.enabled) return false;

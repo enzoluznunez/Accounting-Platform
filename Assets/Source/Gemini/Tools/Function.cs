@@ -17,11 +17,11 @@ public abstract class Function {
 
     public static async Task Run(AsyncSession session, FunctionCall call) {
         Dictionary<string, object> result;
-        if (!registry.TryGetValue(call.Name, out var tool)) {
+        if (!_registry.TryGetValue(call.Name, out var tool)) {
             Debug.LogWarning($"[Function] Unknown tool: {call.Name}");
             result = new Dictionary<string, object> {
                 { "error", $"There is no tool called '{call.Name}'." },
-                { "tools", new List<object>(registry.Keys) }
+                { "tools", new List<object>(_registry.Keys) }
             };
         }
         else {
@@ -104,41 +104,41 @@ public abstract class Function {
     // Keeps only the first maxBytes of what is written but counts everything, so a
     // large result is never materialised as a full string just to be truncated.
     private sealed class TruncatingStream : System.IO.Stream {
-        private readonly byte[] head;
-        private int headLen;
-        private long total;
+        private readonly byte[] _head;
+        private int _headLen;
+        private long _total;
 
-        public TruncatingStream(int maxBytes) { head = new byte[maxBytes]; }
+        public TruncatingStream(int maxBytes) { _head = new byte[maxBytes]; }
 
-        public long Total => total;
-        public string Head => System.Text.Encoding.UTF8.GetString(head, 0, headLen);
+        public long Total => _total;
+        public string Head => System.Text.Encoding.UTF8.GetString(_head, 0, _headLen);
 
         public override void Write(byte[] buffer, int offset, int count) {
-            int keep = Math.Min(count, head.Length - headLen);
+            int keep = Math.Min(count, _head.Length - _headLen);
             if (keep > 0) {
-                Buffer.BlockCopy(buffer, offset, head, headLen, keep);
-                headLen += keep;
+                Buffer.BlockCopy(buffer, offset, _head, _headLen, keep);
+                _headLen += keep;
             }
-            total += count;
+            _total += count;
         }
 
         public override bool CanRead => false;
         public override bool CanSeek => false;
         public override bool CanWrite => true;
-        public override long Length => total;
-        public override long Position { get => total; set => throw new NotSupportedException(); }
+        public override long Length => _total;
+        public override long Position { get => _total; set => throw new NotSupportedException(); }
         public override void Flush() { }
         public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         public override long Seek(long offset, System.IO.SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
     }
 
-    static Dictionary<string, Function> registry;
-    public static IReadOnlyDictionary<string, Function> Registry => registry;
+    static Dictionary<string, Function> _registry;
+    public static IReadOnlyDictionary<string, Function> Registry => _registry;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void Init() {
-        registry = new Dictionary<string, Function>();
+        _registry = new Dictionary<string, Function>();
         var types = Assembly.GetExecutingAssembly().GetTypes()
             .Where(t => t.IsSubclassOf(typeof(Function)) && !t.IsAbstract);
         foreach (var type in types) {
@@ -156,12 +156,12 @@ public abstract class Function {
                 Debug.LogError($"[Function] {type.Name} has no Declaration.Name and will not be registered.");
                 continue;
             }
-            if (registry.ContainsKey(name))
+            if (_registry.ContainsKey(name))
                 Debug.LogError($"[Function] duplicate tool name '{name}'; {type.Name} overwrites the earlier registration.");
 
             instance.Name = name;
-            registry[name] = instance;
+            _registry[name] = instance;
         }
-        Debug.Log($"[Function] registered {registry.Count} tools");
+        Debug.Log($"[Function] registered {_registry.Count} tools");
     }
 }

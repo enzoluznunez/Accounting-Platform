@@ -11,22 +11,22 @@ public class ButtonList
 
     public class Options
     {
-        public Axis axis = Axis.Horizontal;
-        public Sizing sizing = Sizing.Measured;
-        public RectOffset padding;
-        public TextAnchor alignment = TextAnchor.UpperLeft;
-        public bool expandCrossAxis = true;
-        public float itemHeight;
-        public float itemPadding = Style.ButtonTextPad;
-        public bool newestFirst;
-        public bool backed;
-        public bool scrollable;
+        public Axis Axis = Axis.Horizontal;
+        public Sizing Sizing = Sizing.Measured;
+        public RectOffset Padding;
+        public TextAnchor Alignment = TextAnchor.UpperLeft;
+        public bool ExpandCrossAxis = true;
+        public float ItemHeight;
+        public float ItemPadding = Style.ButtonTextPad;
+        public bool NewestFirst;
+        public bool Backed;
+        public bool Scrollable;
 
         // A checkable list is a column of rows rather than a row of buttons: the
         // label sits at the left and a square at the right carries the state, so
         // the row keeps its resting colours however it is set.
-        public bool checkable;
-        public float checkSide = Style.Body;
+        public bool Checkable;
+        public float CheckSide = Style.Body;
     }
 
     private const float EngageBleed = Style.SmallPadding;
@@ -40,14 +40,14 @@ public class ButtonList
     {
         _root = root;
         _options = options ?? new Options();
-        _content = _options.scrollable ? BuildScroll() : _root;
+        _content = _options.Scrollable ? BuildScroll() : _root;
 
         BuildAxisLayout();
     }
 
     private RectTransform BuildScroll()
     {
-        bool vertical = _options.axis == Axis.Vertical;
+        bool vertical = _options.Axis == Axis.Vertical;
 
         RectMask2D mask = _root.gameObject.AddComponent<RectMask2D>();
         mask.padding = vertical
@@ -91,26 +91,26 @@ public class ButtonList
 
     private void BuildAxisLayout()
     {
-        HorizontalOrVerticalLayoutGroup lg = _options.axis == Axis.Vertical
+        HorizontalOrVerticalLayoutGroup lg = _options.Axis == Axis.Vertical
             ? (HorizontalOrVerticalLayoutGroup)_content.gameObject.AddComponent<VerticalLayoutGroup>()
             : _content.gameObject.AddComponent<HorizontalLayoutGroup>();
 
         lg.spacing = Style.SmallPadding;
-        if (_options.padding != null) lg.padding = _options.padding;
-        lg.childAlignment = _options.alignment;
+        if (_options.Padding != null) lg.padding = _options.Padding;
+        lg.childAlignment = _options.Alignment;
         lg.childControlWidth = true;
         lg.childControlHeight = true;
 
-        bool expandAlong = _options.sizing == Sizing.Equal;
-        if (_options.axis == Axis.Horizontal)
+        bool expandAlong = _options.Sizing == Sizing.Equal;
+        if (_options.Axis == Axis.Horizontal)
         {
             lg.childForceExpandWidth = expandAlong;
-            lg.childForceExpandHeight = _options.expandCrossAxis;
+            lg.childForceExpandHeight = _options.ExpandCrossAxis;
         }
         else
         {
             lg.childForceExpandHeight = expandAlong;
-            lg.childForceExpandWidth = _options.expandCrossAxis;
+            lg.childForceExpandWidth = _options.ExpandCrossAxis;
         }
     }
 
@@ -118,26 +118,26 @@ public class ButtonList
     {
         // The square needs room of its own at the right end, and the label needs
         // to stop before it rather than run underneath.
-        float padRight = _options.checkable
-            ? _options.checkSide + _options.itemPadding * 2f
-            : _options.itemPadding;
+        float padRight = _options.Checkable
+            ? _options.CheckSide + _options.ItemPadding * 2f
+            : _options.ItemPadding;
 
         UIButton.Handle h = UIButton.Create(_content, name, label,
-            flexibleWidth: _options.sizing == Sizing.Equal || _options.checkable,
-            height: _options.itemHeight,
-            alignment: _options.checkable ? TextAlignmentOptions.Left : TextAlignmentOptions.Center,
-            padLeft: _options.itemPadding, padRight: padRight);
+            flexibleWidth: _options.Sizing == Sizing.Equal || _options.Checkable,
+            height: _options.ItemHeight,
+            alignment: _options.Checkable ? TextAlignmentOptions.Left : TextAlignmentOptions.Center,
+            padLeft: _options.ItemPadding, padRight: padRight);
 
-        if (_options.backed) UIButton.AddBack(h);
-        if (_options.checkable)
+        if (_options.Backed) UIButton.AddBack(h);
+        if (_options.Checkable)
         {
-            UIButton.AddCheck(h, _options.checkSide);
+            UIButton.AddCheck(h, _options.CheckSide);
             UIButton.SetUntinted(h);
             Stretch(h);
         }
-        else if (_options.sizing == Sizing.Measured) Measure(h);
+        else if (_options.Sizing == Sizing.Measured) Measure(h);
         if (onClick != null) h.Button.onClick.AddListener(onClick);
-        if (_options.newestFirst) h.Root.transform.SetAsFirstSibling();
+        if (_options.NewestFirst) h.Root.transform.SetAsFirstSibling();
 
         _items.Add(h);
         return h;
@@ -152,7 +152,7 @@ public class ButtonList
         if (le == null) return;
 
         UIMeasure.TryTextWidth(h.Text, out float pref);
-        float extent = (pref > 0f ? pref : 0f) + _options.itemPadding * 2f;
+        float extent = (pref > 0f ? pref : 0f) + _options.ItemPadding * 2f;
 
         le.preferredWidth = extent;
         le.flexibleWidth = 0f;

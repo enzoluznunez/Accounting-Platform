@@ -32,12 +32,12 @@ public sealed class ListDatasets : AgenticTool {
 
                 // An industry that has not been read yet has no sheet and no
                 // edits; saying so is the whole of what there is to report.
-                if (!dataset.loaded) {
+                if (!dataset.Loaded) {
                     list.Add(new Dictionary<string, object> {
                         { "name", name },
                         { "active", false },
                         { "read", false },
-                        { "companies", dataset.companies }
+                        { "companies", dataset.Companies }
                     });
                     continue;
                 }
@@ -46,7 +46,7 @@ public sealed class ListDatasets : AgenticTool {
                     { "name", name },
                     { "active", active },
                     { "read", true },
-                    { "edits", DescribeStack(dataset.Edits, dataset.source, active) }
+                    { "edits", DescribeStack(dataset.Edits, dataset.Source, active) }
                 });
             }
         }
@@ -72,14 +72,14 @@ public sealed class ListDatasets : AgenticTool {
         {
             Edit top = stack[i];
             int first = i;
-            if (top.group != 0)
-                while (first - 1 >= 0 && stack[first - 1].group == top.group) first--;
+            if (top.Group != 0)
+                while (first - 1 >= 0 && stack[first - 1].Group == top.Group) first--;
             int steps = i - first + 1;
 
             position++;
             var e = new Dictionary<string, object> {
                 { "position", position },
-                { "kind", Edit.KindName(top.kind) }
+                { "kind", Edit.KindName(top.Kind) }
             };
 
             if (steps > 1)
@@ -112,34 +112,34 @@ public sealed class ListDatasets : AgenticTool {
 
     private static void DescribeEdit(Edit r, Dictionary<string, object> e, DataSource data, bool active)
     {
-        switch (r.kind)
+        switch (r.Kind)
         {
             case EditKind.Move:
             case EditKind.Rotate:
             case EditKind.Scale:
-                e["distanceMeters"] = Math.Round(r.move.distance, 3);
+                e["distanceMeters"] = Math.Round(r.Move.Distance, 3);
                 break;
             case EditKind.Sort:
-                e["direction"] = r.reorderIsColumn ? "column" : "row";
-                if (r.reorderFrom < 0) {
-                    e["reordered"] = r.reorderLines;
-                    e["note"] = $"set the order of {r.reorderLines} {(r.reorderIsColumn ? "columns" : "rows")} at once";
+                e["direction"] = r.ReorderIsColumn ? "column" : "row";
+                if (r.ReorderFrom < 0) {
+                    e["reordered"] = r.ReorderLines;
+                    e["note"] = $"set the order of {r.ReorderLines} {(r.ReorderIsColumn ? "columns" : "rows")} at once";
                 }
                 else {
-                    e["from"] = r.reorderFrom + 1;
-                    e["to"] = r.reorderTarget + 1;
-                    e["positionsMoved"] = Math.Abs(r.reorderTarget - r.reorderFrom);
+                    e["from"] = r.ReorderFrom + 1;
+                    e["to"] = r.ReorderTarget + 1;
+                    e["positionsMoved"] = Math.Abs(r.ReorderTarget - r.ReorderFrom);
                 }
                 break;
             case EditKind.Filter:
-                e["axis"] = r.filterIsRow ? "company" : "metric";
-                e["hidden"] = FilterTitles(data, r.filterIsRow, r.filterPostHidden);
-                e["wasHidden"] = FilterTitles(data, r.filterIsRow, r.filterPreHidden);
+                e["axis"] = r.FilterIsRow ? "company" : "metric";
+                e["hidden"] = FilterTitles(data, r.FilterIsRow, r.FilterPostHidden);
+                e["wasHidden"] = FilterTitles(data, r.FilterIsRow, r.FilterPreHidden);
                 break;
             case EditKind.Profile:
-                e["direction"] = r.projection.isColumn ? "column" : "row";
-                e[r.projection.isColumn ? "column" : "row"] = DataTitle(data, r.projection.isColumn,
-                    r.projection.isColumn ? r.projection.dataCol : r.projection.dataRow);
+                e["direction"] = r.Projection.IsColumn ? "column" : "row";
+                e[r.Projection.IsColumn ? "column" : "row"] = DataTitle(data, r.Projection.IsColumn,
+                    r.Projection.IsColumn ? r.Projection.DataCol : r.Projection.DataRow);
                 break;
         }
     }

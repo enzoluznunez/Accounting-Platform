@@ -7,12 +7,12 @@ using UnityEngine.Profiling;
 
 public abstract class AgenticTool : Function {
 
-    private static int refreshedAxes;
+    private static int _refreshedAxes;
 
-    private readonly string sample;
+    private readonly string _sample;
 
     protected AgenticTool() {
-        sample = "GeminiTool." + GetType().Name;
+        _sample = "GeminiTool." + GetType().Name;
     }
 
     protected abstract void Run(Dictionary<string, object> args, Dictionary<string, object> result);
@@ -28,7 +28,7 @@ public abstract class AgenticTool : Function {
 
     protected virtual bool EditsAreOutcome => false;
 
-    protected static void NoteRefreshed(bool columns) => refreshedAxes |= columns ? 2 : 1;
+    protected static void NoteRefreshed(bool columns) => _refreshedAxes |= columns ? 2 : 1;
 
     protected override async Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) {
         var result = new Dictionary<string, object>();
@@ -38,13 +38,13 @@ public abstract class AgenticTool : Function {
 
         await MainThread.Run(() => {
             var run = System.Diagnostics.Stopwatch.StartNew();
-            Profiler.BeginSample(sample);
+            Profiler.BeginSample(_sample);
             StateChannel.EnterAgentCall();
             try {
                 AgentTurn.NoteToolCall();
                 Scene.Sort?.CompleteOrderSequence();
                 editsBefore = ManageDatasets.ActiveEdits.Count;
-                refreshedAxes = 0;
+                _refreshedAxes = 0;
                 Run(args ?? new Dictionary<string, object>(), result);
             }
             catch (Exception e) {
@@ -53,8 +53,8 @@ public abstract class AgenticTool : Function {
             }
             finally {
                 if (!IsRefusal(result)) {
-                    if ((refreshedAxes & 1) != 0) StalePositions.Clear(false);
-                    if ((refreshedAxes & 2) != 0) StalePositions.Clear(true);
+                    if ((_refreshedAxes & 1) != 0) StalePositions.Clear(false);
+                    if ((_refreshedAxes & 2) != 0) StalePositions.Clear(true);
                 }
                 editsAfter = ManageDatasets.ActiveEdits.Count;
                 StateChannel.ExitAgentCall();
@@ -98,7 +98,7 @@ public abstract class AgenticTool : Function {
     // through it, so a span and a piece cannot come back disagreeing. IsBuilt is
     // _sheets.Count > 0 and Sheet is _sheets[0] or null, so this null test is
     // the same question both of them used to ask separately.
-    private static CreateSheet ResolvedSheet() {
+    private static SheetPiece ResolvedSheet() {
         ManageSheets mgr = Scene.Sheets;
         return mgr != null ? mgr.Sheet : null;
     }
@@ -107,7 +107,7 @@ public abstract class AgenticTool : Function {
         out int rowMin, out int rowMax, out int colMin, out int colMax) {
         rowMin = rowMax = colMin = colMax = 0;
 
-        CreateSheet sheet = ResolvedSheet();
+        SheetPiece sheet = ResolvedSheet();
         if (sheet == null) { result["error"] = "No sheet in scene."; return false; }
 
         rowMin = sheet.rowMin; rowMax = sheet.rowMax; colMin = sheet.colMin; colMax = sheet.colMax;
@@ -349,27 +349,27 @@ public abstract class AgenticTool : Function {
     }
 
     protected readonly struct PiecePose {
-        public readonly UnityEngine.Vector3 pos;
-        public readonly UnityEngine.Quaternion rot;
-        public readonly UnityEngine.Vector3 scale;
-        public PiecePose(UnityEngine.Transform t) { pos = t.localPosition; rot = t.localRotation; scale = t.localScale; }
+        public readonly UnityEngine.Vector3 Pos;
+        public readonly UnityEngine.Quaternion Rot;
+        public readonly UnityEngine.Vector3 Scale;
+        public PiecePose(UnityEngine.Transform t) { Pos = t.localPosition; Rot = t.localRotation; Scale = t.localScale; }
     }
 
     protected static bool TryResolveSheet(Dictionary<string, object> result,
-        string verb, out ManageSheets mgr, out CreateSheet sheet) {
+        string verb, out ManageSheets mgr, out SheetPiece sheet) {
         mgr = Scene.Sheets;
         sheet = ResolvedSheet();
         if (sheet == null) { result["error"] = $"The sheet is not ready to {verb}; is a sheet shown?"; return false; }
         return true;
     }
 
-    protected static PiecePose ApplyPieceTransform(ManageSheets mgr, CreateSheet sheet, Action<UnityEngine.Transform> mutate) {
+    protected static PiecePose ApplyPieceTransform(ManageSheets mgr, SheetPiece sheet, Action<UnityEngine.Transform> mutate) {
         mgr.CompletePieceMotion(sheet);
         UnityEngine.Transform t = sheet.transform;
         var pre = new PiecePose(t);
         mutate(t);
-        mgr.NotifyMoveCommitted(sheet, pre.pos, pre.rot, pre.scale);
-        mgr.AnimatePieceFrom(sheet, pre.pos, pre.rot, pre.scale);
+        mgr.NotifyMoveCommitted(sheet, pre.Pos, pre.Rot, pre.Scale);
+        mgr.AnimatePieceFrom(sheet, pre.Pos, pre.Rot, pre.Scale);
         return pre;
     }
 
@@ -470,12 +470,12 @@ public abstract class AgenticTool : Function {
         SheetStats.Summary s = isColumn
             ? SheetStats.Over(data, crossMin, crossMax, line, line)
             : SheetStats.Over(data, line, line, crossMin, crossMax);
-        if (!s.valid) return false;
+        if (!s.Valid) return false;
         switch (measure) {
-            case "sum": score = s.sum; return true;
-            case "average": score = s.mean; return true;
-            case "max": score = s.max; return true;
-            case "min": score = s.min; return true;
+            case "sum": score = s.Sum; return true;
+            case "average": score = s.Mean; return true;
+            case "max": score = s.Max; return true;
+            case "min": score = s.Min; return true;
             default: return false;
         }
     }

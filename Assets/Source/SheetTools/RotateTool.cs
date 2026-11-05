@@ -2,7 +2,7 @@ using Oculus.Interaction;
 
 public class RotateTool : GrabTool
 {
-    private static ITransformer YawTransformerFor(CreateSheet sheet) => GrabTransformers.EnsureYaw(sheet.gameObject);
+    private static ITransformer YawTransformerFor(SheetPiece sheet) => GrabTransformers.EnsureYaw(sheet.gameObject);
 
     protected override ToolType Kind => ToolType.Rotate;
 

@@ -23,7 +23,7 @@ public sealed class DescribeSheet : AgenticTool {
     protected override void Run(Dictionary<string, object> args, Dictionary<string, object> result) {
         var data = Scene.Data;
         if (data == null) { result["error"] = "No sheet in scene."; return; }
-        if (!TryResolveSheet(result, "describe", out ManageSheets mgr, out CreateSheet piece)) return;
+        if (!TryResolveSheet(result, "describe", out ManageSheets mgr, out SheetPiece piece)) return;
 
         int rowMin = piece.rowMin;
         int rowMax = piece.rowMax;

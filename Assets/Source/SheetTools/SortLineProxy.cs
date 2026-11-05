@@ -8,7 +8,7 @@ using UnityEngine;
 [RequireComponent(typeof(BoxCollider), typeof(Rigidbody))]
 public class SortLineProxy : MonoBehaviour
 {
-    public CreateSheet sheet;
+    public SheetPiece sheet;
     public bool columns;
     public int block;
 
@@ -24,7 +24,7 @@ public class SortLineProxy : MonoBehaviour
 
     // One handle per block, so a grouped axis is grabbed a whole metric at a time
     // and its years can never be pulled apart.
-    public static SortLineProxy Create(CreateSheet owner, bool columns, int block, float height)
+    public static SortLineProxy Create(SheetPiece owner, bool columns, int block, float height)
     {
         if (owner == null) return null;
 

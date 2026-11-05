@@ -39,7 +39,7 @@ public abstract class GrabTool : Tool
         sheetManager.SetGrabbable(false);
     }
 
-    private void OnSheetMoveCommitted(CreateSheet sheet, Vector3 prePos, Quaternion preRot, Vector3 preScale)
+    private void OnSheetMoveCommitted(SheetPiece sheet, Vector3 prePos, Quaternion preRot, Vector3 preScale)
     {
         if (!Active || sheet == null || toolManager == null || sheetManager == null) return;
 

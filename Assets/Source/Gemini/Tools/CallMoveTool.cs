@@ -48,7 +48,7 @@ public sealed class CallMoveTool : AgenticTool<CallMoveTool.Args> {
             result["note"] = $"The distance was limited to the {MinDistance} to {MaxDistance} meter range; {distance} m was used.";
     }
 
-    private static void Slide(ManageSheets mgr, CreateSheet sheet, string direction,
+    private static void Slide(ManageSheets mgr, SheetPiece sheet, string direction,
         Vector3 worldDelta, Dictionary<string, object> result) {
 
         var pre = ApplyPieceTransform(mgr, sheet, t =>

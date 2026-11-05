@@ -7,7 +7,7 @@ public static class StatsTooltip
     }
 
     public static bool TryResolve(ManageSheets sheetManager, ReadSheets.Reading reading,
-        out Tooltip tooltip, out DataSource data, out CreateSheet piece)
+        out Tooltip tooltip, out DataSource data, out SheetPiece piece)
     {
         tooltip = Scene.Tooltip;
         data = Scene.Data;

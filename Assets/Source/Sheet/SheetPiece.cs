@@ -6,7 +6,7 @@ using Oculus.Interaction;
 using Oculus.Interaction.HandGrab;
 
 [RequireComponent(typeof(BoxCollider), typeof(Rigidbody))]
-public class CreateSheet : MonoBehaviour
+public class SheetPiece : MonoBehaviour
 {
 
     private const float ZeroPlateFraction = 0.008f;
@@ -19,11 +19,11 @@ public class CreateSheet : MonoBehaviour
     public int sheetId = -1;
     public int rowMin, rowMax, colMin, colMax;
 
-    private readonly List<CreateCube> _pool = new List<CreateCube>();
-    private readonly List<CreateCube> _live = new List<CreateCube>();
-    private readonly Dictionary<int, CreateCube> _byCell = new Dictionary<int, CreateCube>();
-    private readonly Dictionary<int, List<CreateCube>> _byCol = new Dictionary<int, List<CreateCube>>();
-    private readonly Dictionary<int, List<CreateCube>> _byRow = new Dictionary<int, List<CreateCube>>();
+    private readonly List<SheetCube> _pool = new List<SheetCube>();
+    private readonly List<SheetCube> _live = new List<SheetCube>();
+    private readonly Dictionary<int, SheetCube> _byCell = new Dictionary<int, SheetCube>();
+    private readonly Dictionary<int, List<SheetCube>> _byCol = new Dictionary<int, List<SheetCube>>();
+    private readonly Dictionary<int, List<SheetCube>> _byRow = new Dictionary<int, List<SheetCube>>();
 
     private BoxCollider _bounds;
     private Rigidbody _body;
@@ -36,7 +36,7 @@ public class CreateSheet : MonoBehaviour
 
     private struct BarTarget
     {
-        public CreateCube cube;
+        public SheetCube cube;
         public Vector3 center;
         public Vector3 size;
     }
@@ -115,8 +115,8 @@ public class CreateSheet : MonoBehaviour
     public bool Contains(int visRow, int visCol) =>
         visRow >= rowMin && visRow <= rowMax && visCol >= colMin && visCol <= colMax;
 
-    public CreateCube CubeAt(int visRow, int visCol) =>
-        _byCell.TryGetValue(Key(visRow, visCol), out CreateCube c) ? c : null;
+    public SheetCube CubeAt(int visRow, int visCol) =>
+        _byCell.TryGetValue(Key(visRow, visCol), out SheetCube c) ? c : null;
 
     public void Build(DataSource data, Material material,
         int rMin, int rMax, int cMin, int cMax,
@@ -144,8 +144,8 @@ public class CreateSheet : MonoBehaviour
 
         int used = 0;
         _byCell.Clear();
-        foreach (List<CreateCube> line in _byCol.Values) line.Clear();
-        foreach (List<CreateCube> line in _byRow.Values) line.Clear();
+        foreach (List<SheetCube> line in _byCol.Values) line.Clear();
+        foreach (List<SheetCube> line in _byRow.Values) line.Clear();
 
         for (int vr = rMin; vr <= rMax; vr++)
         {
@@ -170,7 +170,7 @@ public class CreateSheet : MonoBehaviour
                     hi = baseY + plate;
                 }
 
-                CreateCube cube = Acquire(used++);
+                SheetCube cube = Acquire(used++);
                 cube.SetCell(vr, vc, dRow, dCol);
                 Vector3 center = new Vector3(LineCoord(true, vc), (lo + hi) * 0.5f, z);
                 Vector3 size = new Vector3(half * 2f, hi - lo, half * 2f);
@@ -197,8 +197,8 @@ public class CreateSheet : MonoBehaviour
         _labels.Rebuild(data, rMin, rMax, cMin, cMax, cellSize, _groupGap, cubeSide, baseY, labels);
     }
 
-    public IReadOnlyList<CreateCube> CubesInLine(bool columns, int line) =>
-        LineCubes(columns, line) ?? (IReadOnlyList<CreateCube>)Array.Empty<CreateCube>();
+    public IReadOnlyList<SheetCube> CubesInLine(bool columns, int line) =>
+        LineCubes(columns, line) ?? (IReadOnlyList<SheetCube>)Array.Empty<SheetCube>();
 
     private void LateUpdate()
     {
@@ -277,7 +277,7 @@ public class CreateSheet : MonoBehaviour
     {
         for (int i = 0; i < _live.Count; i++)
         {
-            CreateCube cube = _live[i];
+            SheetCube cube = _live[i];
             if (cube == null) continue;
             Vector3 p = cube.transform.localPosition;
             columns[cube.dataCol] = p.x;
@@ -302,27 +302,27 @@ public class CreateSheet : MonoBehaviour
         return Mathf.Lerp(Lightness[lower], Lightness[upper], scaled - lower);
     }
 
-    private static List<CreateCube> LineBucket(Dictionary<int, List<CreateCube>> map, int line)
+    private static List<SheetCube> LineBucket(Dictionary<int, List<SheetCube>> map, int line)
     {
-        if (!map.TryGetValue(line, out List<CreateCube> bucket))
+        if (!map.TryGetValue(line, out List<SheetCube> bucket))
         {
-            bucket = new List<CreateCube>();
+            bucket = new List<SheetCube>();
             map[line] = bucket;
         }
         return bucket;
     }
 
-    private List<CreateCube> LineCubes(bool columns, int line) =>
-        (columns ? _byCol : _byRow).TryGetValue(line, out List<CreateCube> bucket) ? bucket : null;
+    private List<SheetCube> LineCubes(bool columns, int line) =>
+        (columns ? _byCol : _byRow).TryGetValue(line, out List<SheetCube> bucket) ? bucket : null;
 
     public void LayoutLine(bool columns, int line, float coord)
     {
-        List<CreateCube> cubes = LineCubes(columns, line);
+        List<SheetCube> cubes = LineCubes(columns, line);
         if (cubes != null)
         {
             for (int i = 0; i < cubes.Count; i++)
             {
-                CreateCube cube = cubes[i];
+                SheetCube cube = cubes[i];
                 if (cube == null) continue;
 
                 Vector3 p = cube.transform.localPosition;
@@ -337,12 +337,12 @@ public class CreateSheet : MonoBehaviour
 
     public float LineOffset(bool columns, int line)
     {
-        List<CreateCube> cubes = LineCubes(columns, line);
+        List<SheetCube> cubes = LineCubes(columns, line);
         if (cubes != null)
         {
             for (int i = 0; i < cubes.Count; i++)
             {
-                CreateCube cube = cubes[i];
+                SheetCube cube = cubes[i];
                 if (cube == null) continue;
 
                 Vector3 p = cube.transform.localPosition;
@@ -375,7 +375,7 @@ public class CreateSheet : MonoBehaviour
 
         for (int i = 0; i < _live.Count; i++)
         {
-            CreateCube cube = _live[i];
+            SheetCube cube = _live[i];
             int v = axis == 1 ? cube.visCol : cube.visRow;
             bool hit = axis == 3 || (axis > 0 && axis < 3 && v >= min && v <= max);
             if (hit) cube.SetHighlight(swell);
@@ -438,7 +438,7 @@ public class CreateSheet : MonoBehaviour
         Bounds b = new Bounds(_live[0].transform.localPosition, Vector3.zero);
         for (int i = 0; i < _live.Count; i++)
         {
-            CreateCube c = _live[i];
+            SheetCube c = _live[i];
             b.Encapsulate(new Bounds(c.transform.localPosition, c.transform.localScale));
         }
         _bounds.center = b.center;
@@ -549,13 +549,13 @@ public class CreateSheet : MonoBehaviour
         transformer.Initialize(_grabbable);
     }
 
-    private CreateCube Acquire(int index)
+    private SheetCube Acquire(int index)
     {
         while (_pool.Count <= index)
         {
             GameObject go = new GameObject($"Cube_{_pool.Count}");
             go.transform.SetParent(transform, false);
-            CreateCube cube = go.AddComponent<CreateCube>();
+            SheetCube cube = go.AddComponent<SheetCube>();
             cube.Init(_material);
             cube.SetSheet(this);
             _pool.Add(cube);

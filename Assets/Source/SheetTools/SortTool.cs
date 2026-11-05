@@ -9,7 +9,7 @@ public class SortTool : Tool
     private readonly List<SortLineProxy> _proxies = new List<SortLineProxy>();
 
     private SortLineProxy _held;
-    private CreateSheet _dragSheet;
+    private SheetPiece _dragSheet;
     private bool _dragColumns;
     private int _dragBlock = -1;
     private int _dragTarget;
@@ -68,11 +68,11 @@ public class SortTool : Tool
 
         if (!Active || sheetManager == null || !sheetManager.IsBuilt) return;
 
-        IReadOnlyList<CreateSheet> sheets = sheetManager.Sheets;
+        IReadOnlyList<SheetPiece> sheets = sheetManager.Sheets;
 
         for (int i = 0; i < sheets.Count; i++)
         {
-            CreateSheet sheet = sheets[i];
+            SheetPiece sheet = sheets[i];
             if (sheet == null || !sheet.IsBuilt) continue;
 
             for (int axis = 0; axis < 2; axis++)
@@ -128,7 +128,7 @@ public class SortTool : Tool
 
     private void BeginDrag(SortLineProxy proxy)
     {
-        CreateSheet sheet = proxy.sheet;
+        SheetPiece sheet = proxy.sheet;
         if (sheet == null) return;
 
         _dragColumns = proxy.columns;
@@ -165,7 +165,7 @@ public class SortTool : Tool
     {
         int from = _dragBlock;
         int target = _dragTarget;
-        CreateSheet sheet = _dragSheet;
+        SheetPiece sheet = _dragSheet;
 
         _held = null;
         ClearDrag();
@@ -314,7 +314,7 @@ public class SortTool : Tool
 
     // 'from' and 'to' are block positions: whole metrics on a grouped axis, single
     // lines otherwise.
-    public bool MoveLine(bool columns, int from, int to, CreateSheet piece)
+    public bool MoveLine(bool columns, int from, int to, SheetPiece piece)
     {
         if (!Active) return false;
 
@@ -362,7 +362,7 @@ public class SortTool : Tool
 
     private void CancelDrag()
     {
-        CreateSheet sheet = _dragSheet;
+        SheetPiece sheet = _dragSheet;
         _held = null;
         ClearDrag();
         RestLayout(sheet);
@@ -374,7 +374,7 @@ public class SortTool : Tool
         _dragBlock = -1;
     }
 
-    private void RestLayout(CreateSheet sheet)
+    private void RestLayout(SheetPiece sheet)
     {
         if (sheet != null) sheet.RestLines();
     }

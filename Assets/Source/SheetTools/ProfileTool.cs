@@ -113,7 +113,7 @@ public class ProfileTool : Tool
     private void ShowStats(bool columns, ReadSheets.Reading reading)
     {
         if (!StatsTooltip.TryResolve(sheetManager, reading,
-                out Tooltip tooltip, out DataSource data, out CreateSheet piece)) return;
+                out Tooltip tooltip, out DataSource data, out SheetPiece piece)) return;
 
         int line = columns ? reading.visCol : reading.visRow;
         string name = columns && data.IsGrouped(true)
@@ -145,7 +145,7 @@ public class ProfileTool : Tool
         };
 
         ManageSheets sheets = sheetManager;
-        CreateSheet target = piece;
+        SheetPiece target = piece;
         float lift = liftAboveMaximumHeight;
         Vector3 fallback = reading.point;
 
@@ -160,7 +160,7 @@ public class ProfileTool : Tool
     {
         if (!Active || sheetManager == null) return false;
 
-        CreateCube cube = sheetManager.CubeAt(visRow, visCol);
+        SheetCube cube = sheetManager.CubeAt(visRow, visCol);
         if (cube == null) return false;
 
         return Project(columns, cube.dataRow, cube.dataCol, visRow, visCol);

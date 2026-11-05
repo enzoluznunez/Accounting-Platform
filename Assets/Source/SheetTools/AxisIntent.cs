@@ -46,7 +46,7 @@ public sealed class AxisIntent
         forRows = Mathf.Abs(localDelta.x);
     }
 
-    public static bool ReachScores(CreateSheet sheet, Vector3 wrist, Vector3 tip, out float forColumns, out float forRows)
+    public static bool ReachScores(SheetPiece sheet, Vector3 wrist, Vector3 tip, out float forColumns, out float forRows)
     {
         Vector3 d = sheet.transform.InverseTransformDirection(tip - wrist);
         d.y = 0f;

@@ -6,8 +6,8 @@ public class ReadSheets : MonoBehaviour
     public struct Reading
     {
         public bool valid;
-        public CreateSheet sheet;
-        public CreateCube cube;
+        public SheetPiece sheet;
+        public SheetCube cube;
         public int visRow;
         public int visCol;
         public int dataRow;
@@ -30,7 +30,7 @@ public class ReadSheets : MonoBehaviour
     [Tooltip("Let a fingertip drive the sheet. Turn off only to take the sheet out of play.")]
     public bool touchInput = true;
 
-    private CreateSheet _pressed;
+    private SheetPiece _pressed;
 
     private void Awake()
     {
@@ -70,7 +70,7 @@ public class ReadSheets : MonoBehaviour
         OnCleared?.Invoke();
     }
 
-    public static Reading Describe(CreateCube cube, Vector3 point) => new Reading
+    public static Reading Describe(SheetCube cube, Vector3 point) => new Reading
     {
         valid = true,
         sheet = cube.Sheet,

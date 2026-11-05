@@ -228,13 +228,13 @@ public class SheetLabels
 
         if (data != null && style.show && cellSize > 0f)
         {
-            float centerX = CreateSheet.Center(colMin, colMax, cellSize, _colGroupSize, groupGap);
-            float centerZ = CreateSheet.Center(rowMin, rowMax, cellSize, 1, 0f);
+            float centerX = SheetPiece.Center(colMin, colMax, cellSize, _colGroupSize, groupGap);
+            float centerZ = SheetPiece.Center(rowMin, rowMax, cellSize, 1, 0f);
             float half = cubeSide * 0.5f;
             float y = baseY;
 
-            float ColX(int vc) => CreateSheet.Raw(vc, cellSize, _colGroupSize, groupGap) - centerX;
-            float RowZ(int vr) => CreateSheet.Raw(vr, cellSize, 1, 0f) - centerZ;
+            float ColX(int vc) => SheetPiece.Raw(vc, cellSize, _colGroupSize, groupGap) - centerX;
+            float RowZ(int vr) => SheetPiece.Raw(vr, cellSize, 1, 0f) - centerZ;
 
             _margin = cellSize;
             _lowZ = RowZ(rowMin) - half - style.gap;

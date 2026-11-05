@@ -412,7 +412,7 @@ def sheet_pipeline(query):
     return stages
 
 
-class EmptySheet(Exception):
+class EmptySheetError(Exception):
     """No company matched. The endpoint turns this into a 404, which the app
     reports as an industry it could not open."""
 
@@ -423,7 +423,7 @@ def sheet_csv(query):
     it stands rather than an export of how it once stood."""
     found = list(database.companies().aggregate(sheet_pipeline(query)))
     if not found:
-        raise EmptySheet(describe_empty(query))
+        raise EmptySheetError(describe_empty(query))
 
     # Labelled by ticker: a ticker is a handful of characters where a name runs
     # to twenty-seven, so every label fits beside its row on the sheet instead
@@ -454,7 +454,7 @@ def describe_empty(query):
 def sheet(query: Annotated[SheetQuery, Query()]):
     try:
         return sheet_csv(query)
-    except EmptySheet as empty:
+    except EmptySheetError as empty:
         raise HTTPException(404, str(empty)) from None
 
 

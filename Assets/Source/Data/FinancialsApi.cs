@@ -35,7 +35,7 @@ public static class FinancialsApi {
 
     public const string Unreachable = "The financial database could not be reached.";
 
-    private static readonly HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly HttpClient _http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
 
     // A reply the server chose to send: its status and the text of its 'detail'.
     public sealed class ApiError : Exception {
@@ -46,7 +46,7 @@ public static class FinancialsApi {
     public static async Task<string> Get(string path) {
         using var request = new HttpRequestMessage(HttpMethod.Get, Url(path));
         if (!string.IsNullOrEmpty(ApiKey)) request.Headers.Add(KeyHeader, ApiKey);
-        using HttpResponseMessage response = await http.SendAsync(request).ConfigureAwait(false);
+        using HttpResponseMessage response = await _http.SendAsync(request).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         if (!response.IsSuccessStatusCode) throw new ApiError((int)response.StatusCode, Detail(body));
         return body;

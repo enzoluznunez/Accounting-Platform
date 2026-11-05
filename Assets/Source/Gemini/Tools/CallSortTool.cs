@@ -85,21 +85,21 @@ public sealed class CallSortTool : AgenticTool<CallSortTool.Args> {
 
         int round = Gemini.ToolRoundId;
         int axisSlot = isColumn ? 1 : 0;
-        if (lastSortRound[axisSlot] == round) {
+        if (_lastSortRound[axisSlot] == round) {
             result["error"] = $"Only one reorder can run at a time. Each one shifts the positions of the "
                 + $"{axis} around it, so separate calls do not combine into the arrangement you pictured. "
                 + $"Send one call with 'order' listing the {axis} in the sequence you want.";
             EchoOrder(data, isColumn, data.OrderOf(isColumn), result);
             return;
         }
-        lastSortRound[axisSlot] = round;
+        _lastSortRound[axisSlot] = round;
 
         if (wantsOrder) RunOrder(args, sort, data, isColumn, axis, lineCount, result);
         else if (wantsBy) RunBy(args, sort, data, isColumn, axis, count, result);
         else RunMove(args, sort, data, isColumn, axis, count, result);
     }
 
-    private static readonly int[] lastSortRound = { -1, -1 };
+    private static readonly int[] _lastSortRound = { -1, -1 };
 
     private static void RunOrder(Args args, SortTool sort, DataSource data, bool isColumn,
         string axis, int lineCount, Dictionary<string, object> result) {

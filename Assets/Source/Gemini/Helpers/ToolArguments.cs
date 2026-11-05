@@ -35,16 +35,16 @@ public sealed class DefaultsToAttribute : Attribute {
 
 public static class ToolArguments {
 
-    private static readonly Dictionary<System.Type, Schema> cache = new Dictionary<System.Type, Schema>();
+    private static readonly Dictionary<System.Type, Schema> _cache = new Dictionary<System.Type, Schema>();
 
     [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ClearCache() => cache.Clear();
+    private static void ClearCache() => _cache.Clear();
 
     public static Schema Schema(System.Type args) {
         if (args == null) return null;
-        if (cache.TryGetValue(args, out var cached)) return cached;
+        if (_cache.TryGetValue(args, out var cached)) return cached;
         var built = Build(args);
-        cache[args] = built;
+        _cache[args] = built;
         return built;
     }
 

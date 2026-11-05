@@ -26,39 +26,39 @@ public static class Gemini {
 
     private const string ModelId = "gemini-3.1-flash-live-preview";
 
-    private static Client client;
-    private static LiveConnectConfig config;
-    private static readonly ConcurrentQueue<byte[]> sendQueue = new ConcurrentQueue<byte[]>();
-    private static SemaphoreSlim sendSignal;
-    private static SemaphoreSlim actionSignal;
+    private static Client _client;
+    private static LiveConnectConfig _config;
+    private static readonly ConcurrentQueue<byte[]> _sendQueue = new ConcurrentQueue<byte[]>();
+    private static SemaphoreSlim _sendSignal;
+    private static SemaphoreSlim _actionSignal;
 
-    private static readonly ConcurrentQueue<string> protocolLog = new ConcurrentQueue<string>();
-    private static volatile bool setupCompleted;
-    private static volatile bool generationActive;
-    private static volatile bool shutdownAfterTurn;
+    private static readonly ConcurrentQueue<string> _protocolLog = new ConcurrentQueue<string>();
+    private static volatile bool _setupCompleted;
+    private static volatile bool _generationActive;
+    private static volatile bool _shutdownAfterTurn;
 
-    private static CancellationTokenSource sessionCts;
-    private static Task sessionTask;
-    private static volatile AsyncSession liveSession;
-    private static bool micGranted;
+    private static CancellationTokenSource _sessionCts;
+    private static Task _sessionTask;
+    private static volatile AsyncSession _liveSession;
+    private static bool _micGranted;
     private static bool _listening;
     private static volatile GeminiStatus _status = GeminiStatus.Off;
-    private static int sessionGeneration;
-    private static int connectionCounter;
-    private static int activeConnection;
-    private static volatile string resumeHandle;
+    private static int _sessionGeneration;
+    private static int _connectionCounter;
+    private static int _activeConnection;
+    private static volatile string _resumeHandle;
 
-    private static int toolRoundsThisTurn;
-    private static int toolRoundId;
-    private static volatile bool resumedConnection;
-    private static bool webSearchEnabled;
+    private static int _toolRoundsThisTurn;
+    private static int _toolRoundId;
+    private static volatile bool _resumedConnection;
+    private static bool _webSearchEnabled;
 
-    private static volatile bool keepAlive;
-    private static volatile bool goAwayPending;
-    private static DateTime goAwayGraceUtc;
-    private static int pendingClosingNotice;
-    private static int pendingClosedNotice;
-    private static DateTime lastInactiveUtc;
+    private static volatile bool _keepAlive;
+    private static volatile bool _goAwayPending;
+    private static DateTime _goAwayGraceUtc;
+    private static int _pendingClosingNotice;
+    private static int _pendingClosedNotice;
+    private static DateTime _lastInactiveUtc;
 
     private static readonly TimeSpan IdleReset = TimeSpan.FromHours(2);
 
@@ -70,26 +70,26 @@ public static class Gemini {
     private const int MaxFailures = 5;
 
     public static GeminiStatus Status => _status;
-    public static int ToolRoundId => Volatile.Read(ref toolRoundId);
+    public static int ToolRoundId => Volatile.Read(ref _toolRoundId);
 
-    public static void RequestActionPush() => actionSignal?.Release();
+    public static void RequestActionPush() => _actionSignal?.Release();
     public static void SetKeepAlive(bool value) {
-        keepAlive = value;
-        if (value) actionSignal?.Release();
+        _keepAlive = value;
+        if (value) _actionSignal?.Release();
     }
 
-    public static void RequestShutdownAfterTurn() => shutdownAfterTurn = true;
+    public static void RequestShutdownAfterTurn() => _shutdownAfterTurn = true;
 
-    public static void CancelShutdownRequest() => shutdownAfterTurn = false;
+    public static void CancelShutdownRequest() => _shutdownAfterTurn = false;
 
     private static bool ConsumeShutdownRequest() {
-        if (!shutdownAfterTurn) return false;
-        shutdownAfterTurn = false;
+        if (!_shutdownAfterTurn) return false;
+        _shutdownAfterTurn = false;
         return true;
     }
 
-    public static bool ConsumeClosingNotice() => Interlocked.Exchange(ref pendingClosingNotice, 0) == 1;
-    public static bool ConsumeClosedNotice() => Interlocked.Exchange(ref pendingClosedNotice, 0) == 1;
+    public static bool ConsumeClosingNotice() => Interlocked.Exchange(ref _pendingClosingNotice, 0) == 1;
+    public static bool ConsumeClosedNotice() => Interlocked.Exchange(ref _pendingClosedNotice, 0) == 1;
 
     // Init and config: the API key, mic permission, and the Live session config.
 
@@ -128,37 +128,37 @@ public static class Gemini {
         return tcs.Task;
     }
 
-    private static Task initTask;
-    private static readonly object initGate = new object();
+    private static Task _initTask;
+    private static readonly object _initGate = new object();
 
     public static Task EnsureInit(bool webSearch) {
-        lock (initGate) {
-            if (initTask == null) initTask = Init(webSearch);
-            return initTask;
+        lock (_initGate) {
+            if (_initTask == null) _initTask = Init(webSearch);
+            return _initTask;
         }
     }
 
     private static async Task Init(bool webSearch) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         try {
-            webSearchEnabled = webSearch;
+            _webSearchEnabled = webSearch;
             var keyTask = LoadApiKey();
             var micTask = EnsureMicPermission();
-            client = new Client(apiKey: await keyTask);
+            _client = new Client(apiKey: await keyTask);
             ResetWindow();
 
             BuildConfig();
 
-            micGranted = await micTask;
-            if (!micGranted) {
+            _micGranted = await micTask;
+            if (!_micGranted) {
                 Debug.LogWarning("[Gemini] Microphone permission denied; voice input disabled.");
                 _status = GeminiStatus.MicDenied;
             }
 
             Speaker.Init();
-            sendSignal = new SemaphoreSlim(0);
-            actionSignal = new SemaphoreSlim(0);
-            if (micGranted) {
+            _sendSignal = new SemaphoreSlim(0);
+            _actionSignal = new SemaphoreSlim(0);
+            if (_micGranted) {
                 Voip.Init();
                 Voip.OnAudioCaptured += SendTick;
             }
@@ -173,13 +173,13 @@ public static class Gemini {
 
     private static void BuildConfig() {
         var tools = new List<GTool>();
-        if (webSearchEnabled) tools.Add(new GTool { GoogleSearch = new GoogleSearch() });
+        if (_webSearchEnabled) tools.Add(new GTool { GoogleSearch = new GoogleSearch() });
         tools.Add(new GTool { FunctionDeclarations = SystemPrompt.ToolDeclarations() });
 
-        string instruction = SystemPrompt.Instruction(webSearchEnabled);
+        string instruction = SystemPrompt.Instruction(_webSearchEnabled);
         Debug.Log($"[Gemini] system instruction: {instruction.Length} chars");
 
-        config = new LiveConnectConfig {
+        _config = new LiveConnectConfig {
             SystemInstruction = new Content {
                 Parts = new List<Part> { new Part { Text = instruction } }
             },
@@ -213,23 +213,23 @@ public static class Gemini {
     // Session lifecycle: connecting, reconnecting after GoAway, and shutting down.
 
     private static void BeginGoAwayReconnect() {
-        if (goAwayPending) return;
-        goAwayGraceUtc = DateTime.UtcNow.AddMilliseconds(GoAwayGraceMs);
-        goAwayPending = true;
+        if (_goAwayPending) return;
+        _goAwayGraceUtc = DateTime.UtcNow.AddMilliseconds(GoAwayGraceMs);
+        _goAwayPending = true;
     }
 
     private static async Task GoAwayPump(AsyncSession s, CancellationToken token) {
         while (!token.IsCancellationRequested) {
             try { await Task.Delay(200, token).ConfigureAwait(false); }
             catch (OperationCanceledException) { return; }
-            if (s != liveSession) return;
+            if (s != _liveSession) return;
             CheckStalledTools();
-            if (!goAwayPending) continue;
+            if (!_goAwayPending) continue;
 
-            bool quiet = !generationActive;
-            if (!quiet && DateTime.UtcNow < goAwayGraceUtc) continue;
+            bool quiet = !_generationActive;
+            if (!quiet && DateTime.UtcNow < _goAwayGraceUtc) continue;
 
-            goAwayPending = false;
+            _goAwayPending = false;
             NoteProtocol($"-> goAway reconnect (quiet={quiet})");
             Debug.Log($"[Gemini][session] cycling socket after GoAway (quiet={quiet})");
             try { await s.CloseAsync().ConfigureAwait(false); } catch { }
@@ -246,24 +246,24 @@ public static class Gemini {
         }
 
         while (!token.IsCancellationRequested) {
-            goAwayPending = false;
+            _goAwayPending = false;
             AsyncSession s = null;
             try {
-                config.SessionResumption = new SessionResumptionConfig { Handle = resumeHandle };
-                resumedConnection = resumeHandle != null;
-                setupCompleted = false;
-                generationActive = false;
-                Interlocked.Exchange(ref toolRoundsThisTurn, 0);
+                _config.SessionResumption = new SessionResumptionConfig { Handle = _resumeHandle };
+                _resumedConnection = _resumeHandle != null;
+                _setupCompleted = false;
+                _generationActive = false;
+                Interlocked.Exchange(ref _toolRoundsThisTurn, 0);
                 ResetTranscripts();
                 ClearPendingCalls();
-                Debug.Log($"[Gemini][diag] connecting: model={ModelId}, tools={config.Tools?.Sum(t => t.FunctionDeclarations?.Count ?? 0)}, resume={resumeHandle != null}, serverTrim={SafetyNetTrigger}/{SafetyNetTarget}");
-                s = await client.Live.ConnectAsync(model: ModelId, config: config).ConfigureAwait(false);
+                Debug.Log($"[Gemini][diag] connecting: model={ModelId}, tools={_config.Tools?.Sum(t => t.FunctionDeclarations?.Count ?? 0)}, resume={_resumeHandle != null}, serverTrim={SafetyNetTrigger}/{SafetyNetTarget}");
+                s = await _client.Live.ConnectAsync(model: ModelId, config: _config).ConfigureAwait(false);
                 if (!Current(gen)) break;
                 _status = GeminiStatus.Live;
-                liveSession = s;
-                int conn = Interlocked.Increment(ref connectionCounter);
-                Volatile.Write(ref activeConnection, conn);
-                Debug.Log($"[Gemini][session] live (gen={gen}, conn={conn}, resumed={resumeHandle != null}, contextBefore={contextTokens})");
+                _liveSession = s;
+                int conn = Interlocked.Increment(ref _connectionCounter);
+                Volatile.Write(ref _activeConnection, conn);
+                Debug.Log($"[Gemini][session] live (gen={gen}, conn={conn}, resumed={_resumeHandle != null}, contextBefore={_contextTokens})");
 
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 var send = SendPump(s, token);
@@ -272,9 +272,9 @@ public static class Gemini {
                 var away = GoAwayPump(s, token);
                 await Task.WhenAny(send, recv).ConfigureAwait(false);
                 if (CurrentConnection(conn)) RetireConnection();
-                if (ReferenceEquals(liveSession, s)) liveSession = null;
-                sendSignal?.Release();
-                actionSignal?.Release();
+                if (ReferenceEquals(_liveSession, s)) _liveSession = null;
+                _sendSignal?.Release();
+                _actionSignal?.Release();
                 try { await s.CloseAsync().ConfigureAwait(false); } catch { }
                 try { await Task.WhenAll(send, recv, push, away).ConfigureAwait(false); } catch { }
                 s = null;
@@ -286,9 +286,9 @@ public static class Gemini {
                 }
                 else {
                     Backoff();
-                    if (resumeHandle != null) {
+                    if (_resumeHandle != null) {
                         Debug.LogWarning("[Gemini] session died immediately; dropping stale resume handle and starting fresh");
-                        resumeHandle = null;
+                        _resumeHandle = null;
                     }
                 }
             }
@@ -297,22 +297,22 @@ public static class Gemini {
             }
             catch (Exception e) {
                 Debug.LogError($"[Gemini] session error: {e}");
-                if (s == null) resumeHandle = null;
+                if (s == null) _resumeHandle = null;
                 Backoff();
             }
             finally {
                 if (s != null) {
-                    if (ReferenceEquals(liveSession, s)) liveSession = null;
+                    if (ReferenceEquals(_liveSession, s)) _liveSession = null;
                     try { await s.CloseAsync().ConfigureAwait(false); } catch { }
                 }
             }
 
             if (token.IsCancellationRequested) break;
-            if (exhausted) {
-                Interlocked.Exchange(ref pendingClosedNotice, 1);
+            if (_exhausted) {
+                Interlocked.Exchange(ref _pendingClosedNotice, 1);
                 break;
             }
-            if (!keepAlive) break;
+            if (!_keepAlive) break;
 
             if (failures >= MaxFailures) {
                 Debug.LogError("[Gemini] giving up after repeated session failures");
@@ -330,27 +330,27 @@ public static class Gemini {
     }
 
     public static void Connect() {
-        if (client == null) return;
+        if (_client == null) return;
 
-        bool running = sessionTask != null && !sessionTask.IsCompleted;
+        bool running = _sessionTask != null && !_sessionTask.IsCompleted;
         if (running && (_status == GeminiStatus.Live || _status == GeminiStatus.Connecting)) return;
 
-        if (lastInactiveUtc != default && DateTime.UtcNow - lastInactiveUtc > IdleReset) {
-            resumeHandle = null;
+        if (_lastInactiveUtc != default && DateTime.UtcNow - _lastInactiveUtc > IdleReset) {
+            _resumeHandle = null;
             ResetWindow();
         }
 
         ClearExhaustion();
 
         _status = GeminiStatus.Connecting;
-        shutdownAfterTurn = false;
+        _shutdownAfterTurn = false;
 
-        Task previous = sessionTask;
-        sessionCts?.Cancel();
-        int gen = Interlocked.Increment(ref sessionGeneration);
+        Task previous = _sessionTask;
+        _sessionCts?.Cancel();
+        int gen = Interlocked.Increment(ref _sessionGeneration);
         var cts = new CancellationTokenSource();
-        sessionCts = cts;
-        sessionTask = RunAfterAsync(previous, gen, cts.Token);
+        _sessionCts = cts;
+        _sessionTask = RunAfterAsync(previous, gen, cts.Token);
     }
 
     private static async Task RunAfterAsync(Task previous, int gen, CancellationToken token) {
@@ -372,15 +372,15 @@ public static class Gemini {
     public static void Disconnect() {
         Mute();
         RetireConnection();
-        Interlocked.Increment(ref sessionGeneration);
-        CancellationTokenSource cts = sessionCts;
-        sessionCts = null;
+        Interlocked.Increment(ref _sessionGeneration);
+        CancellationTokenSource cts = _sessionCts;
+        _sessionCts = null;
         if (cts != null)
             Task.Run(() => {
                 try { cts.Cancel(); }
                 catch (ObjectDisposedException) { }
             });
-        lastInactiveUtc = DateTime.UtcNow;
+        _lastInactiveUtc = DateTime.UtcNow;
         if (_status != GeminiStatus.MicDenied && _status != GeminiStatus.Failed)
             _status = GeminiStatus.Off;
     }
@@ -388,11 +388,11 @@ public static class Gemini {
     public static void Destroy() {
         try {
             RetireConnection();
-            Interlocked.Increment(ref sessionGeneration);
-            sessionCts?.Cancel();
-            sessionCts = null;
-            sessionTask = null;
-            bool hadMic = micGranted;
+            Interlocked.Increment(ref _sessionGeneration);
+            _sessionCts?.Cancel();
+            _sessionCts = null;
+            _sessionTask = null;
+            bool hadMic = _micGranted;
             if (hadMic) Voip.OnAudioCaptured -= SendTick;
             RunAudio(() => {
                 if (hadMic) Voip.Destroy();
@@ -406,11 +406,11 @@ public static class Gemini {
         }
     }
 
-    private static bool Current(int gen) => gen == Volatile.Read(ref sessionGeneration);
+    private static bool Current(int gen) => gen == Volatile.Read(ref _sessionGeneration);
 
-    private static bool CurrentConnection(int conn) => conn == Volatile.Read(ref activeConnection);
+    private static bool CurrentConnection(int conn) => conn == Volatile.Read(ref _activeConnection);
 
-    private static void RetireConnection() => Volatile.Write(ref activeConnection, 0);
+    private static void RetireConnection() => Volatile.Write(ref _activeConnection, 0);
 
     private static void SetStatus(int gen, GeminiStatus status) {
         if (Current(gen)) _status = status;
@@ -418,12 +418,12 @@ public static class Gemini {
 
     // Audio control.
 
-    private static readonly object audioGate = new object();
-    private static Task audioTail = Task.CompletedTask;
+    private static readonly object _audioGate = new object();
+    private static Task _audioTail = Task.CompletedTask;
 
     private static void RunAudio(Action action) {
-        lock (audioGate) {
-            audioTail = audioTail.ContinueWith(_ => {
+        lock (_audioGate) {
+            _audioTail = _audioTail.ContinueWith(_ => {
                 try { action(); }
                 catch (Exception e) { Debug.LogError(e); }
             }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
@@ -431,7 +431,7 @@ public static class Gemini {
     }
 
     public static void Listen() {
-        if (!micGranted) {
+        if (!_micGranted) {
             _status = GeminiStatus.MicDenied;
             return;
         }
@@ -459,62 +459,62 @@ public static class Gemini {
     private const int FrameBytes = 640;
     private const int RawLogInterval = 500;
 
-    private static readonly object micGate = new object();
-    private static byte[] micAccum = new byte[FrameBytes * 4];
-    private static int micAccumLen;
+    private static readonly object _micGate = new object();
+    private static byte[] _micAccum = new byte[FrameBytes * 4];
+    private static int _micAccumLen;
 
-    private static int rawFrames;
-    private static int rawMin = int.MaxValue;
-    private static int rawMax;
+    private static int _rawFrames;
+    private static int _rawMin = int.MaxValue;
+    private static int _rawMax;
 
     private static void ClearPendingMic() {
-        lock (micGate) micAccumLen = 0;
-        while (sendQueue.TryDequeue(out _)) { }
+        lock (_micGate) _micAccumLen = 0;
+        while (_sendQueue.TryDequeue(out _)) { }
     }
 
     private static void SendTick(byte[] data) {
         if (data == null || data.Length == 0) return;
 
-        rawFrames++;
-        if (data.Length < rawMin) rawMin = data.Length;
-        if (data.Length > rawMax) rawMax = data.Length;
-        if (rawFrames % RawLogInterval == 0) {
-            Debug.Log($"[Gemini] mic in: {rawFrames} frames, raw {rawMin}-{rawMax} B (~{rawMin / 32f:0.#}-{rawMax / 32f:0.#} ms); sending fixed {FrameBytes} B (~{FrameBytes / 32f:0.#} ms)");
-            rawMin = int.MaxValue;
-            rawMax = 0;
+        _rawFrames++;
+        if (data.Length < _rawMin) _rawMin = data.Length;
+        if (data.Length > _rawMax) _rawMax = data.Length;
+        if (_rawFrames % RawLogInterval == 0) {
+            Debug.Log($"[Gemini] mic in: {_rawFrames} frames, raw {_rawMin}-{_rawMax} B (~{_rawMin / 32f:0.#}-{_rawMax / 32f:0.#} ms); sending fixed {FrameBytes} B (~{FrameBytes / 32f:0.#} ms)");
+            _rawMin = int.MaxValue;
+            _rawMax = 0;
         }
 
-        lock (micGate) {
-            int needed = micAccumLen + data.Length;
-            if (needed > micAccum.Length)
-                Array.Resize(ref micAccum, Math.Max(micAccum.Length * 2, needed));
-            Buffer.BlockCopy(data, 0, micAccum, micAccumLen, data.Length);
-            micAccumLen = needed;
+        lock (_micGate) {
+            int needed = _micAccumLen + data.Length;
+            if (needed > _micAccum.Length)
+                Array.Resize(ref _micAccum, Math.Max(_micAccum.Length * 2, needed));
+            Buffer.BlockCopy(data, 0, _micAccum, _micAccumLen, data.Length);
+            _micAccumLen = needed;
 
             int off = 0;
-            while (micAccumLen - off >= FrameBytes) {
+            while (_micAccumLen - off >= FrameBytes) {
                 var frame = new byte[FrameBytes];
-                Buffer.BlockCopy(micAccum, off, frame, 0, FrameBytes);
+                Buffer.BlockCopy(_micAccum, off, frame, 0, FrameBytes);
                 off += FrameBytes;
-                sendQueue.Enqueue(frame);
-                while (sendQueue.Count > MaxQueuedFrames && sendQueue.TryDequeue(out _)) { }
-                sendSignal?.Release();
+                _sendQueue.Enqueue(frame);
+                while (_sendQueue.Count > MaxQueuedFrames && _sendQueue.TryDequeue(out _)) { }
+                _sendSignal?.Release();
             }
 
             if (off == 0) return;
-            micAccumLen -= off;
-            if (micAccumLen > 0) Buffer.BlockCopy(micAccum, off, micAccum, 0, micAccumLen);
+            _micAccumLen -= off;
+            if (_micAccumLen > 0) Buffer.BlockCopy(_micAccum, off, _micAccum, 0, _micAccumLen);
         }
     }
 
     private static async Task SendPump(AsyncSession s, CancellationToken token) {
         while (!token.IsCancellationRequested) {
-            try { await sendSignal.WaitAsync(token).ConfigureAwait(false); }
+            try { await _sendSignal.WaitAsync(token).ConfigureAwait(false); }
             catch (OperationCanceledException) { break; }
-            if (s != liveSession) return;
-            while (sendQueue.TryDequeue(out byte[] data)) {
-                if (s != liveSession) return;
-                if (!setupCompleted || _status != GeminiStatus.Live) continue;
+            if (s != _liveSession) return;
+            while (_sendQueue.TryDequeue(out byte[] data)) {
+                if (s != _liveSession) return;
+                if (!_setupCompleted || _status != GeminiStatus.Live) continue;
                 try {
                     await s.SendRealtimeInputAsync(new LiveSendRealtimeInputParameters {
                         Audio = new Blob {
@@ -533,22 +533,22 @@ public static class Gemini {
     }
 
     private static bool IdleForPush() =>
-        keepAlive && setupCompleted && _status == GeminiStatus.Live && !generationActive;
+        _keepAlive && _setupCompleted && _status == GeminiStatus.Live && !_generationActive;
 
     private static async Task ActionPushPump(AsyncSession s, CancellationToken token) {
         while (!token.IsCancellationRequested) {
-            if (!StateChannel.HasPending || !keepAlive) {
-                try { await actionSignal.WaitAsync(token).ConfigureAwait(false); }
+            if (!StateChannel.HasPending || !_keepAlive) {
+                try { await _actionSignal.WaitAsync(token).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
             }
-            if (s != liveSession) return;
-            if (!keepAlive) continue;
+            if (s != _liveSession) return;
+            if (!_keepAlive) continue;
 
             int waited = 0;
             while (!IdleForPush() && waited < 30000) {
                 try { await Task.Delay(100, token).ConfigureAwait(false); }
                 catch (OperationCanceledException) { return; }
-                if (s != liveSession) return;
+                if (s != _liveSession) return;
                 waited += 100;
             }
             if (!IdleForPush()) continue;
@@ -586,16 +586,16 @@ public static class Gemini {
 
     // Receive: server messages, usage, tool calls and transcripts.
 
-    private static readonly System.Text.StringBuilder inTranscript = new System.Text.StringBuilder();
-    private static readonly System.Text.StringBuilder outTranscript = new System.Text.StringBuilder();
-    private static bool pendingUserFlush;
-    private static string lastUserText;
+    private static readonly System.Text.StringBuilder _inTranscript = new System.Text.StringBuilder();
+    private static readonly System.Text.StringBuilder _outTranscript = new System.Text.StringBuilder();
+    private static bool _pendingUserFlush;
+    private static string _lastUserText;
 
     private static void ResetTranscripts() {
-        inTranscript.Clear();
-        outTranscript.Clear();
-        pendingUserFlush = false;
-        lastUserText = null;
+        _inTranscript.Clear();
+        _outTranscript.Clear();
+        _pendingUserFlush = false;
+        _lastUserText = null;
     }
 
     private const int MaxSpokenChars = 400;
@@ -612,8 +612,8 @@ public static class Gemini {
         if (text.Length == 0) return;
 
         if (isUser) {
-            if (text == lastUserText) return;
-            lastUserText = text;
+            if (text == _lastUserText) return;
+            _lastUserText = text;
         }
 
         Debug.Log($"[Gemini][{(isUser ? "user" : "ada")}] {Spoken(text)}");
@@ -626,7 +626,7 @@ public static class Gemini {
             catch (OperationCanceledException) { break; }
             catch (Exception e) {
                 Debug.LogError($"[Gemini] receive failed: {e.Message}");
-                Debug.LogError($"[Gemini][diag] setupCompleted={setupCompleted}; recent protocol:\n  {DumpProtocol()}");
+                Debug.LogError($"[Gemini][diag] setupCompleted={_setupCompleted}; recent protocol:\n  {DumpProtocol()}");
                 break;
             }
             if (response == null) break;
@@ -647,9 +647,9 @@ public static class Gemini {
         HandleControl(s, response);
         HandleTools(s, response);
         HandleContent(response.ServerContent);
-        if (pendingUserFlush) {
-            pendingUserFlush = false;
-            FlushUtterance(inTranscript, true);
+        if (_pendingUserFlush) {
+            _pendingUserFlush = false;
+            FlushUtterance(_inTranscript, true);
         }
     }
 
@@ -671,44 +671,44 @@ public static class Gemini {
         long cachedTok = (long?)usage.CachedContentTokenCount ?? 0;
         long thoughtTok = (long?)usage.ThoughtsTokenCount ?? 0;
         long uncachedTok = promptTok > cachedTok ? promptTok - cachedTok : 0;
-        int rounds = Volatile.Read(ref toolRoundsThisTurn);
+        int rounds = Volatile.Read(ref _toolRoundsThisTurn);
         bool usable = TrackContext(conn, promptTok, uncachedTok, rounds, out long context, out bool exact);
         string how = exact ? "exact" : $"estimated over {rounds} tool rounds";
 
-        Debug.Log($"[Gemini][usage] conn={conn} context={context} ({how}) prompt={promptTok} response={usage.ResponseTokenCount} total={usage.TotalTokenCount} session={sessionPromptTokens} cached={cachedTok} uncached={uncachedTok} thoughts={thoughtTok} sessionUncached={sessionUncachedTokens} promptByModality=[{byMod}] at {DateTime.UtcNow:HH:mm:ss.fff}");
+        Debug.Log($"[Gemini][usage] conn={conn} context={context} ({how}) prompt={promptTok} response={usage.ResponseTokenCount} total={usage.TotalTokenCount} session={_sessionPromptTokens} cached={cachedTok} uncached={uncachedTok} thoughts={thoughtTok} sessionUncached={_sessionUncachedTokens} promptByModality=[{byMod}] at {DateTime.UtcNow:HH:mm:ss.fff}");
 
-        if (exact && lastExactContext > 0 && context + 2000 < lastExactContext)
-            Debug.Log($"[Gemini][window] context fell {lastExactContext} -> {context}; the server trimmed it");
-        if (exact) lastExactContext = context;
+        if (exact && _lastExactContext > 0 && context + 2000 < _lastExactContext)
+            Debug.Log($"[Gemini][window] context fell {_lastExactContext} -> {context}; the server trimmed it");
+        if (exact) _lastExactContext = context;
 
         if (usable) ObserveCeiling(context);
     }
 
     private static void HandleControl(AsyncSession s, LiveServerMessage response) {
         if (response.SetupComplete != null) {
-            setupCompleted = true;
+            _setupCompleted = true;
             Debug.Log("[Gemini][diag] setup complete");
             StateChannel.RequestSnapshot();
         }
 
         var resume = response.SessionResumptionUpdate;
         if (resume != null && resume.Resumable == true && !string.IsNullOrEmpty(resume.NewHandle))
-            resumeHandle = resume.NewHandle;
+            _resumeHandle = resume.NewHandle;
 
         if (response.GoAway != null) {
             Debug.Log($"[Gemini] server GoAway (time left: {response.GoAway.TimeLeft})");
-            if (keepAlive) BeginGoAwayReconnect();
+            if (_keepAlive) BeginGoAwayReconnect();
             else _ = s.CloseAsync();
         }
     }
 
     private static void HandleTools(AsyncSession s, LiveServerMessage response) {
         if (response.ToolCall != null) {
-            generationActive = true;
+            _generationActive = true;
             var calls = response.ToolCall.FunctionCalls;
             if (calls != null) {
-                Interlocked.Increment(ref toolRoundId);
-                if (Interlocked.Increment(ref toolRoundsThisTurn) == 1) pendingUserFlush = true;
+                Interlocked.Increment(ref _toolRoundId);
+                if (Interlocked.Increment(ref _toolRoundsThisTurn) == 1) _pendingUserFlush = true;
                 NoteProtocol($"<- toolCall {string.Join(",", calls.ConvertAll(c => c.Name))}");
                 foreach (var call in calls) {
                     NoteToolDispatched(call.Id, call.Name);
@@ -739,38 +739,38 @@ public static class Gemini {
 
         var inTx = content.InputTranscription;
         if (inTx != null) {
-            if (!string.IsNullOrEmpty(inTx.Text)) inTranscript.Append(inTx.Text);
-            if (inTx.Finished == true) FlushUtterance(inTranscript, true);
+            if (!string.IsNullOrEmpty(inTx.Text)) _inTranscript.Append(inTx.Text);
+            if (inTx.Finished == true) FlushUtterance(_inTranscript, true);
         }
 
         var outTx = content.OutputTranscription;
         if (outTx != null) {
-            if (!string.IsNullOrEmpty(outTx.Text)) { outTranscript.Append(outTx.Text); generationActive = true; }
-            if (outTx.Finished == true) FlushUtterance(outTranscript, false);
+            if (!string.IsNullOrEmpty(outTx.Text)) { _outTranscript.Append(outTx.Text); _generationActive = true; }
+            if (outTx.Finished == true) FlushUtterance(_outTranscript, false);
         }
 
         // An interruption can arrive in the same message as the turn's end, so
         // it only stops the audio here; the turn-end handling below still runs.
         bool interrupted = content.Interrupted == true;
         if (interrupted) {
-            generationActive = false;
+            _generationActive = false;
             NoteProtocol("<- interrupted");
             Speaker.Flush();
-            FlushUtterance(outTranscript, false);
+            FlushUtterance(_outTranscript, false);
         }
 
         if (content.TurnComplete == true) {
-            generationActive = false;
+            _generationActive = false;
             NoteProtocol("<- turnComplete");
 
             var reason = content.TurnCompleteReason;
             if (reason != null) NoteProtocol($"<- turnCompleteReason {reason}");
 
-            FlushUtterance(inTranscript, true);
-            FlushUtterance(outTranscript, false);
-            pendingUserFlush = false;
-            lastUserText = null;
-            Interlocked.Exchange(ref toolRoundsThisTurn, 0);
+            FlushUtterance(_inTranscript, true);
+            FlushUtterance(_outTranscript, false);
+            _pendingUserFlush = false;
+            _lastUserText = null;
+            Interlocked.Exchange(ref _toolRoundsThisTurn, 0);
 
             // This runs on the receive thread, and AgentTurn's state is read and
             // written by tool calls on the main thread, so it is cleared there.
@@ -789,7 +789,7 @@ public static class Gemini {
         var parts = content.ModelTurn?.Parts;
         if (parts == null) return;
 
-        generationActive = true;
+        _generationActive = true;
         for (int i = 0; i < parts.Count; i++) {
             var data = parts[i].InlineData;
             if (data?.Data != null && data.Data.Length > 0 &&
@@ -808,48 +808,48 @@ public static class Gemini {
 
     private const int ToolStallMs = 20000;
 
-    private static readonly ConcurrentDictionary<string, PendingCall> pendingCalls =
+    private static readonly ConcurrentDictionary<string, PendingCall> _pendingCalls =
         new ConcurrentDictionary<string, PendingCall>();
 
     private static void NoteToolDispatched(string id, string name) {
         if (string.IsNullOrEmpty(id)) return;
-        pendingCalls[id] = new PendingCall { Name = name, SentUtc = DateTime.UtcNow };
+        _pendingCalls[id] = new PendingCall { Name = name, SentUtc = DateTime.UtcNow };
     }
 
     public static void NoteToolSettled(string id) {
         if (string.IsNullOrEmpty(id)) return;
-        pendingCalls.TryRemove(id, out _);
+        _pendingCalls.TryRemove(id, out _);
     }
 
-    private static void ClearPendingCalls() => pendingCalls.Clear();
+    private static void ClearPendingCalls() => _pendingCalls.Clear();
 
     private static void CheckStalledTools() {
-        if (pendingCalls.IsEmpty) return;
+        if (_pendingCalls.IsEmpty) return;
         DateTime now = DateTime.UtcNow;
 
-        foreach (var pair in pendingCalls) {
+        foreach (var pair in _pendingCalls) {
             PendingCall call = pair.Value;
             if ((now - call.SentUtc).TotalMilliseconds < ToolStallMs) continue;
-            if (!pendingCalls.TryRemove(pair.Key, out _)) continue;
+            if (!_pendingCalls.TryRemove(pair.Key, out _)) continue;
 
             Debug.LogError($"[Gemini][stall] no tool response was ever sent for {call.Name} " +
                            $"(id={pair.Key}) after {ToolStallMs / 1000}s; the turn cannot complete");
         }
     }
 
-    private static readonly HashSet<string> cancelledCalls = new HashSet<string>();
-    private static readonly object cancelGate = new object();
+    private static readonly HashSet<string> _cancelledCalls = new HashSet<string>();
+    private static readonly object _cancelGate = new object();
 
     private static void CancelToolCalls(IEnumerable<string> ids) {
         if (ids == null) return;
-        lock (cancelGate)
+        lock (_cancelGate)
             foreach (var id in ids)
-                if (!string.IsNullOrEmpty(id)) cancelledCalls.Add(id);
+                if (!string.IsNullOrEmpty(id)) _cancelledCalls.Add(id);
     }
 
     public static bool ConsumeToolCallCancelled(string id) {
         if (string.IsNullOrEmpty(id)) return false;
-        lock (cancelGate) return cancelledCalls.Remove(id);
+        lock (_cancelGate) return _cancelledCalls.Remove(id);
     }
 
     // Context window: token accounting and the ceiling.
@@ -861,75 +861,75 @@ public static class Gemini {
     private const long ExhaustTokens = ContextWindowTokens / 2;
     private const long ExhaustWarnTokens = ExhaustTokens - 6000;
 
-    private static int usageConnection;
-    private static long contextTokens;
-    private static long sessionPromptTokens;
-    private static long sessionUncachedTokens;
-    private static long lastExactContext;
+    private static int _usageConnection;
+    private static long _contextTokens;
+    private static long _sessionPromptTokens;
+    private static long _sessionUncachedTokens;
+    private static long _lastExactContext;
 
-    private static volatile bool exhausted;
-    private static volatile bool exhaustWarned;
+    private static volatile bool _exhausted;
+    private static volatile bool _exhaustWarned;
 
     private static void ResetWindow() {
         StateChannel.ClearPending();
-        usageConnection = 0;
-        contextTokens = 0;
-        sessionPromptTokens = 0;
-        sessionUncachedTokens = 0;
-        lastExactContext = 0;
-        Interlocked.Exchange(ref toolRoundsThisTurn, 0);
+        _usageConnection = 0;
+        _contextTokens = 0;
+        _sessionPromptTokens = 0;
+        _sessionUncachedTokens = 0;
+        _lastExactContext = 0;
+        Interlocked.Exchange(ref _toolRoundsThisTurn, 0);
     }
 
     private static bool TrackContext(int conn, long promptTokens, long uncachedTokens, int rounds, out long context, out bool exact) {
-        if (conn != usageConnection) {
-            usageConnection = conn;
-            if (!resumedConnection) contextTokens = 0;
+        if (conn != _usageConnection) {
+            _usageConnection = conn;
+            if (!_resumedConnection) _contextTokens = 0;
         }
 
-        if (promptTokens > 0) sessionPromptTokens += promptTokens;
-        if (uncachedTokens > 0) sessionUncachedTokens += uncachedTokens;
+        if (promptTokens > 0) _sessionPromptTokens += promptTokens;
+        if (uncachedTokens > 0) _sessionUncachedTokens += uncachedTokens;
 
         exact = rounds <= 0;
-        context = contextTokens;
+        context = _contextTokens;
         if (promptTokens <= 0) return false;
 
         long reading = promptTokens / (rounds + 1);
-        if (exact || reading > contextTokens) contextTokens = reading;
+        if (exact || reading > _contextTokens) _contextTokens = reading;
 
-        context = contextTokens;
+        context = _contextTokens;
         return true;
     }
 
     private static void ObserveCeiling(long context) {
         if (context >= ExhaustTokens) { MarkExhausted(context); return; }
-        if (context < ExhaustWarnTokens || exhaustWarned) return;
+        if (context < ExhaustWarnTokens || _exhaustWarned) return;
 
-        exhaustWarned = true;
+        _exhaustWarned = true;
         Debug.LogWarning($"[Gemini][window] approaching context ceiling: {context} of {ExhaustTokens}");
-        Interlocked.Exchange(ref pendingClosingNotice, 1);
+        Interlocked.Exchange(ref _pendingClosingNotice, 1);
     }
 
     private static void ClearExhaustion() {
-        exhausted = false;
-        exhaustWarned = false;
+        _exhausted = false;
+        _exhaustWarned = false;
     }
 
     private static void MarkExhausted(long context) {
-        if (exhausted) return;
-        exhausted = true;
+        if (_exhausted) return;
+        _exhausted = true;
         Debug.LogWarning($"[Gemini][window] context ceiling reached: {context} >= {ExhaustTokens}");
-        resumeHandle = null;
+        _resumeHandle = null;
         RetireConnection();
-        var s = liveSession;
+        var s = _liveSession;
         if (s != null) { try { _ = s.CloseAsync(); } catch { } }
     }
 
     // Protocol log.
 
     public static void NoteProtocol(string desc) {
-        protocolLog.Enqueue($"{DateTime.UtcNow:HH:mm:ss.fff} {desc}");
-        while (protocolLog.Count > 16 && protocolLog.TryDequeue(out _)) { }
+        _protocolLog.Enqueue($"{DateTime.UtcNow:HH:mm:ss.fff} {desc}");
+        while (_protocolLog.Count > 16 && _protocolLog.TryDequeue(out _)) { }
     }
 
-    private static string DumpProtocol() => string.Join("\n  ", protocolLog.ToArray());
+    private static string DumpProtocol() => string.Join("\n  ", _protocolLog.ToArray());
 }

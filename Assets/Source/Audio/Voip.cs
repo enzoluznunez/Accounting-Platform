@@ -20,13 +20,13 @@ public static class Voip {
         OnAudioCaptured?.Invoke(data);
     }
 
-    private static AudioCallback callback = HandleAudio;
+    private static AudioCallback _callback = HandleAudio;
 
     [DllImport("voip", EntryPoint = "init")]
     private static extern void Init(AudioCallback callbackParam);
 
     public static void Init() {
-        Init(callback);
+        Init(_callback);
     }
 
     [DllImport("voip", EntryPoint = "destroy")]

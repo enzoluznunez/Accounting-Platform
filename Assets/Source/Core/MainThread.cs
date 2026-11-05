@@ -5,20 +5,20 @@ using UnityEngine;
 
 public class MainThread : MonoBehaviour {
 
-    private static MainThread instance;
-    private static readonly ConcurrentQueue<Action> queue = new ConcurrentQueue<Action>();
+    private static MainThread _instance;
+    private static readonly ConcurrentQueue<Action> _queue = new ConcurrentQueue<Action>();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Bootstrap() {
-        if (instance != null) return;
+        if (_instance != null) return;
         var go = new GameObject("MainThread");
-        instance = go.AddComponent<MainThread>();
+        _instance = go.AddComponent<MainThread>();
         DontDestroyOnLoad(go);
     }
 
     public static Task Run(Action action) {
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        queue.Enqueue(() => {
+        _queue.Enqueue(() => {
             try {
                 action();
                 tcs.SetResult(true);
@@ -31,6 +31,6 @@ public class MainThread : MonoBehaviour {
     }
 
     private void Update() {
-        while (queue.TryDequeue(out var action)) action();
+        while (_queue.TryDequeue(out var action)) action();
     }
 }

@@ -8,12 +8,12 @@ public sealed class DescribeDataset : AgenticTool<DescribeDataset.Args> {
     private const int DefaultLines = 200;
     private const int MaxCharacters = 15000;
 
-    private static string lastPagedLabel;
+    private static string _lastPagedLabel;
 
     [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStatics() => lastPagedLabel = null;
+    private static void ResetStatics() => _lastPagedLabel = null;
 
-    public static void Forget() => lastPagedLabel = null;
+    public static void Forget() => _lastPagedLabel = null;
 
     public class Args {
         [Doc("The first line to return, 1-based."), Limits(1, int.MaxValue), DefaultsTo(1), Optional]
@@ -48,9 +48,9 @@ public sealed class DescribeDataset : AgenticTool<DescribeDataset.Args> {
         int from = Math.Max(1, args.fromLine ?? 1);
 
         string current = Scene.DatasetLabel;
-        if (from > 1 && lastPagedLabel != null && !string.Equals(lastPagedLabel, current)) {
+        if (from > 1 && _lastPagedLabel != null && !string.Equals(_lastPagedLabel, current)) {
             Refuse(result, "continuation from a different dataset",
-                $"Your last read came from {lastPagedLabel}, but {current} is open now. " +
+                $"Your last read came from {_lastPagedLabel}, but {current} is open now. " +
                 "Page reads start over after a switch; call again from line 1.");
             result["dataset"] = current;
             return;
@@ -87,7 +87,7 @@ public sealed class DescribeDataset : AgenticTool<DescribeDataset.Args> {
             included++;
         }
 
-        lastPagedLabel = current;
+        _lastPagedLabel = current;
         result["dataset"] = current;
         result["fromLine"] = from;
         result["lineCount"] = included;

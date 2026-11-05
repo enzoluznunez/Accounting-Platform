@@ -7,12 +7,12 @@ using UnityEngine.Profiling;
 
 public abstract class AgenticTool : Function {
 
-    private static int refreshedAxes;
+    private static int _refreshedAxes;
 
-    private readonly string sample;
+    private readonly string _sample;
 
     protected AgenticTool() {
-        sample = "GeminiTool." + GetType().Name;
+        _sample = "GeminiTool." + GetType().Name;
     }
 
     protected abstract void Run(Dictionary<string, object> args, Dictionary<string, object> result);
@@ -28,7 +28,7 @@ public abstract class AgenticTool : Function {
 
     protected virtual bool EditsAreOutcome => false;
 
-    protected static void NoteRefreshed(bool columns) => refreshedAxes |= columns ? 2 : 1;
+    protected static void NoteRefreshed(bool columns) => _refreshedAxes |= columns ? 2 : 1;
 
     protected override async Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) {
         var result = new Dictionary<string, object>();
@@ -38,13 +38,13 @@ public abstract class AgenticTool : Function {
 
         await MainThread.Run(() => {
             var run = System.Diagnostics.Stopwatch.StartNew();
-            Profiler.BeginSample(sample);
+            Profiler.BeginSample(_sample);
             StateChannel.EnterAgentCall();
             try {
                 AgentTurn.NoteToolCall();
                 Scene.Sort?.CompleteOrderSequence();
                 editsBefore = ManageDatasets.ActiveEdits.Count;
-                refreshedAxes = 0;
+                _refreshedAxes = 0;
                 Run(args ?? new Dictionary<string, object>(), result);
             }
             catch (Exception e) {
@@ -53,8 +53,8 @@ public abstract class AgenticTool : Function {
             }
             finally {
                 if (!IsRefusal(result)) {
-                    if ((refreshedAxes & 1) != 0) StalePositions.Clear(false);
-                    if ((refreshedAxes & 2) != 0) StalePositions.Clear(true);
+                    if ((_refreshedAxes & 1) != 0) StalePositions.Clear(false);
+                    if ((_refreshedAxes & 2) != 0) StalePositions.Clear(true);
                 }
                 editsAfter = ManageDatasets.ActiveEdits.Count;
                 StateChannel.ExitAgentCall();

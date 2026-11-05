@@ -103,7 +103,7 @@ public sealed class OpenIndustrySheet : AgenticTool {
         public string label;
     }
 
-    private static readonly ConditionalWeakTable<Dictionary<string, object>, Download> downloads =
+    private static readonly ConditionalWeakTable<Dictionary<string, object>, Download> _downloads =
         new ConditionalWeakTable<Dictionary<string, object>, Download>();
 
     protected override async Task<Dictionary<string, object>> Execute(Dictionary<string, object> args) {
@@ -187,12 +187,12 @@ public sealed class OpenIndustrySheet : AgenticTool {
             return Fail(why);
         }
 
-        downloads.Add(args, new Download { csv = csv, label = label });
+        _downloads.Add(args, new Download { csv = csv, label = label });
         try {
             return await base.Execute(args).ConfigureAwait(false);
         }
         finally {
-            downloads.Remove(args);
+            _downloads.Remove(args);
         }
     }
 
@@ -223,7 +223,7 @@ public sealed class OpenIndustrySheet : AgenticTool {
     }
 
     protected override void Run(Dictionary<string, object> args, Dictionary<string, object> result) {
-        if (!downloads.TryGetValue(args, out Download download)) {
+        if (!_downloads.TryGetValue(args, out Download download)) {
             result["error"] = "The sheet was not downloaded.";
             return;
         }

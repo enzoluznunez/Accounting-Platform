@@ -23,7 +23,7 @@ public class ToolPanelUI : PanelUI
     private Coroutine _resizeRoutine;
     private GridLayoutGroup _toolGrid;
     private UIButton.Handle _assistantButton;
-    private Watch _assistant;
+    private HandButton _assistant;
 
     public static readonly string[] AssistantSpeedLabels = { "0.5 m/s", "1 m/s", "Instant" };
     private static readonly float[] AssistantSpeedValues = { 0.5f, 1f, 0f };
@@ -143,7 +143,7 @@ public class ToolPanelUI : PanelUI
         return card;
     }
 
-    private Watch Assistant
+    private HandButton Assistant
     {
         get
         {
@@ -421,7 +421,7 @@ public class ToolPanelUI : PanelUI
 
     private void OnAssistantClicked()
     {
-        Watch assistant = Assistant;
+        HandButton assistant = Assistant;
         if (assistant == null) return;
         bool turningOn = !assistant.IsGeminiActive;
         assistant.SetGeminiActive(turningOn, AssistantCause.User);
@@ -834,7 +834,7 @@ public class ToolPanelUI : PanelUI
         PanelGuard.ClearToolPanel();
         StateChannel.RecordState("toolPanel", "the tool panel is open, so the tool buttons are on screen");
 
-        Watch assistant = Assistant;
+        HandButton assistant = Assistant;
         if (assistant != null) assistant.NotifyIntent();
 
         if (toolManager != null) toolManager.ResumeTool();
@@ -856,7 +856,7 @@ public class ToolPanelUI : PanelUI
         if (StateChannel.UserDriven) PanelGuard.MarkToolPanelClosedByUser();
         StateChannel.RecordState("toolPanel", "the tool panel is closed, so the tool buttons are off screen");
 
-        Watch assistant = Assistant;
+        HandButton assistant = Assistant;
         if (assistant != null) assistant.NotifyIntentEnded();
     }
 

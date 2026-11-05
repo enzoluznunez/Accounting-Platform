@@ -359,7 +359,7 @@ GameObject:
   - component: {fileID: 37346856}
   - component: {fileID: 37346855}
   m_Layer: 6
-  m_Name: WatchCanvas
+  m_Name: HandButtonCanvas
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -9160,7 +9160,7 @@ GameObject:
   - component: {fileID: 1662494103}
   - component: {fileID: 1662494102}
   m_Layer: 0
-  m_Name: Watch
+  m_Name: HandButton
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -9177,7 +9177,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 81eb3fe7e7fe74d4b9f77d417ac43a70, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Watch
+  m_EditorClassIdentifier: Assembly-CSharp::HandButton
   _hand: {fileID: 1048234294}
   toolPanelUI: {fileID: 2024053875}
   geminiClient: {fileID: 704980503}

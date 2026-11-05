@@ -779,8 +779,8 @@ public static class Gemini {
             _ = MainThread.Run(() => {
                 AgentTurn.Clear();
                 if (!shutdown) return;
-                var watch = Scene.Assistant;
-                if (watch != null) watch.SetGeminiActive(false, AssistantCause.Agent);
+                var handButton = Scene.Assistant;
+                if (handButton != null) handButton.SetGeminiActive(false, AssistantCause.Agent);
             });
         }
 

@@ -5,7 +5,7 @@ public static class Scene {
     private static ManageTools toolManager;
     private static ToolPanelUI toolPanelUI;
     private static DataSource dataSource;
-    private static Watch watch;
+    private static HandButton handButton;
     private static FilterTool filterTool;
     private static ProfileTool profileTool;
     private static SortTool sortTool;
@@ -16,7 +16,7 @@ public static class Scene {
 
     public static ManageTools Tools => Resolve(ref toolManager);
     public static ToolPanelUI ToolPanel => Resolve(ref toolPanelUI);
-    public static Watch Assistant => Resolve(ref watch);
+    public static HandButton Assistant => Resolve(ref handButton);
     public static FilterTool Filter => Resolve(ref filterTool);
     public static ProfileTool Profile => Resolve(ref profileTool);
     public static SortTool Sort => Resolve(ref sortTool);

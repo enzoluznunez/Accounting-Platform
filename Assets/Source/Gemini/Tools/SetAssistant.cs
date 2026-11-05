@@ -18,19 +18,19 @@ public sealed class SetAssistant : AgenticTool<SetAssistant.Args> {
     };
 
     protected override void Run(Args args, Dictionary<string, object> result) {
-        var watch = Scene.Assistant;
-        if (watch == null) { result["error"] = "Watch not found in scene."; return; }
+        var handButton = Scene.Assistant;
+        if (handButton == null) { result["error"] = "HandButton not found in scene."; return; }
 
         bool active;
         switch (args.state) {
             case "on": active = true; break;
             case "off": active = false; break;
-            default: active = !watch.IsGeminiActive; break;
+            default: active = !handButton.IsGeminiActive; break;
         }
 
         if (active) {
             Gemini.CancelShutdownRequest();
-            watch.SetGeminiActive(true, AssistantCause.Agent);
+            handButton.SetGeminiActive(true, AssistantCause.Agent);
         }
         else {
             if (AgentTurn.UserTookOver) {

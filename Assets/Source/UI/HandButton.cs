@@ -6,7 +6,7 @@ using Oculus.Interaction.Input;
 
 public enum AssistantCause { User, Agent, Failure }
 
-public class Watch : MonoBehaviour
+public class HandButton : MonoBehaviour
 {
     [SerializeField, Interface(typeof(IHand))]
     private UnityEngine.Object _hand;
@@ -19,7 +19,7 @@ public class Watch : MonoBehaviour
     [Header("Pose smoothing")]
     [Tooltip("Lowest position smoothing frequency in Hz; lower removes more shimmer at rest.")]
     public float posMinCutoff = 1f;
-    [Tooltip("How quickly position smoothing releases as the hand speeds up; raise if the watch trails fast motion.")]
+    [Tooltip("How quickly position smoothing releases as the hand speeds up; raise if the button trails fast motion.")]
     public float posBeta = 0.02f;
     [Tooltip("Lowest rotation smoothing frequency in Hz; lower removes more shimmer at rest.")]
     public float rotMinCutoff = 1f;
@@ -85,7 +85,7 @@ public class Watch : MonoBehaviour
         SizeToButtons();
     }
 
-    // The watch shows exactly the buttons it binds. Anything else left in the
+    // The hand button shows exactly the buttons it binds. Anything else left in the
     // group — a button for a panel that no longer exists — is taken off the
     // layout rather than left sitting there doing nothing.
     private void HideUnboundButtons()
@@ -118,14 +118,14 @@ public class Watch : MonoBehaviour
             GameObject child = group.GetChild(i).gameObject;
             if (!child.activeSelf || child.GetComponent<LayoutElement>() == null) continue;
 
-            UILayout.FixedSize(child, Style.WatchButton);
+            UILayout.FixedSize(child, Style.HandButton);
             count++;
         }
         if (count == 0) return;
 
         Vector2 size = new Vector2(
-            Style.WatchButton.x + vlg.padding.left + vlg.padding.right,
-            count * Style.WatchButton.y + (count - 1) * vlg.spacing
+            Style.HandButton.x + vlg.padding.left + vlg.padding.right,
+            count * Style.HandButton.y + (count - 1) * vlg.spacing
                 + vlg.padding.top + vlg.padding.bottom);
 
         RectTransform canvasRect = _canvas != null ? _canvas.transform as RectTransform : null;
@@ -143,12 +143,12 @@ public class Watch : MonoBehaviour
         Transform t = FindTransform.FindDeep(transform, name);
         if (t == null)
         {
-            Debug.LogError($"[Watch] No button named '{name}' under the watch; that panel cannot be opened from the hand menu.");
+            Debug.LogError($"[HandButton] No button named '{name}' under the hand button; that panel cannot be opened from the hand menu.");
             return null;
         }
 
         UIButton.Handle h = UIButton.Adopt(t.gameObject,
-            radius: Style.WatchButtonDiameter * 0.5f);
+            radius: Style.HandButtonDiameter * 0.5f);
         if (h.Text != null) h.Text.gameObject.SetActive(false);
         h.Button.onClick.AddListener(onClick);
         UIButton.SetSelected(h, false);
@@ -374,7 +374,7 @@ public class Watch : MonoBehaviour
     [ContextMenu("Log Wrist Anchor")]
     private void LogWristAnchor()
     {
-        Debug.Log($"[Watch] anchorOffset {_anchorOffset.ToString("F4")} " +
+        Debug.Log($"[HandButton] anchorOffset {_anchorOffset.ToString("F4")} " +
                   $"anchorRotation {_anchorRotation.eulerAngles.ToString("F2")} " +
                   $"(calibrated={_calibrated})");
     }

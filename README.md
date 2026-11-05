@@ -81,11 +81,11 @@ flowchart LR
 
 ### Prerequisites
 
-- [ ] A Meta Quest 3 with a USB-C cable
-- [ ] A computer (macOS or Windows) that can run Unity 6
-- [ ] A Google Gemini API key on a paid tier (only needed for voice)
-- [ ] The API key file, `api.key`, from the project owner
-- [ ] Internet access on the headset
+- A Meta Quest 3 with a USB-C cable
+- A computer (macOS or Windows) that can run Unity 6
+- A Google Gemini API key on a paid tier (only needed for voice)
+- The API key file, `api.key`, from the project owner
+- Internet access on the headset
 
 ### Prepare the Meta Quest 3
 

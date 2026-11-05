@@ -9,12 +9,6 @@ financials stand in front of you in passthrough, one industry at a time or all o
 them at once, and you reshape them with your hands. A voice assistant, Ada, can
 drive the same tools when asked.
 
-[![pipeline](https://github.com/enzoluznunez/Accounting-Platform/actions/workflows/pipeline.yml/badge.svg)](https://github.com/enzoluznunez/Accounting-Platform/actions/workflows/pipeline.yml)
-![Unity 6000.4.0f1](https://img.shields.io/badge/Unity-6000.4.0f1-black?logo=unity)
-![Meta Quest 3](https://img.shields.io/badge/Meta%20Quest-3-1c1e20?logo=meta)
-![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-
 - [What You Can Do](#what-you-can-do)
 - [What's in the Repository](#whats-in-the-repository)
 - [Tech Stack](#tech-stack)

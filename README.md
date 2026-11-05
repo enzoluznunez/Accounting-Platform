@@ -348,6 +348,6 @@ features are planned.
 
 ## License
 
-Released under the [MIT License](LICENSE). Third-party SDKs under `Assets/`
-(Meta XR, TextMesh Pro, and the NuGet packages in `Assets/Packages/`) keep
-their own licenses.
+Released under the [MIT License](LICENSE). Third-party code keeps its own
+license: TextMesh Pro and the NuGet packages in `Assets/Packages/`, and the Meta XR
+SDKs listed in `Packages/manifest.json`.

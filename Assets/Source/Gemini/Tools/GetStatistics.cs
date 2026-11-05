@@ -134,18 +134,18 @@ public sealed class GetStatistics : AgenticTool<GetStatistics.Args> {
 
     private static void Fill(Dictionary<string, object> entry, SheetStats.Summary s,
         DataSource data, bool column, int visLine) {
-        if (!s.valid) {
+        if (!s.Valid) {
             entry["note"] = "No values here.";
             return;
         }
 
-        entry["count"] = s.count;
-        entry["minimum"] = Round(s.min);
-        entry["maximum"] = Round(s.max);
-        entry["average"] = Round(s.mean);
-        entry["sum"] = Round(s.sum);
+        entry["count"] = s.Count;
+        entry["minimum"] = Round(s.Min);
+        entry["maximum"] = Round(s.Max);
+        entry["average"] = Round(s.Mean);
+        entry["sum"] = Round(s.Sum);
 
-        entry["minAt"] = data.TitleAt(!column, column ? s.minVisRow : s.minVisCol);
-        entry["maxAt"] = data.TitleAt(!column, column ? s.maxVisRow : s.maxVisCol);
+        entry["minAt"] = data.TitleAt(!column, column ? s.MinVisRow : s.MinVisCol);
+        entry["maxAt"] = data.TitleAt(!column, column ? s.MaxVisRow : s.MaxVisCol);
     }
 }

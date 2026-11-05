@@ -41,11 +41,11 @@ public class ManageSheets : MonoBehaviour
 
     private struct Projection
     {
-        public ProjectionRecord rec;
-        public SheetPiece view;
-        public SheetPiece source;
-        public int visRow;
-        public int visCol;
+        public ProjectionRecord Rec;
+        public SheetPiece View;
+        public SheetPiece Source;
+        public int VisRow;
+        public int VisCol;
     }
 
     private readonly List<SheetPiece> _sheets = new List<SheetPiece>();
@@ -275,9 +275,9 @@ public class ManageSheets : MonoBehaviour
 
     public SheetLabelStyle LabelStyle() => new SheetLabelStyle
     {
-        show = showLabels,
-        color = Style.White,
-        gap = labelGap
+        Show = showLabels,
+        Color = Style.White,
+        Gap = labelGap
     };
 
     // The industries a piece holds, in row order. What the assistant needs to
@@ -320,13 +320,13 @@ public class ManageSheets : MonoBehaviour
     {
         if (e == null) return UndoResult.Stale;
 
-        switch (e.kind)
+        switch (e.Kind)
         {
             case EditKind.Move:
             case EditKind.Rotate:
             case EditKind.Scale:
-                Vector3 preScale = OrOne(e.move.preScale);
-                return RestoreSheetPose(e.move.sheetId, e.move.prePos, e.move.preRot, preScale)
+                Vector3 preScale = OrOne(e.Move.PreScale);
+                return RestoreSheetPose(e.Move.SheetId, e.Move.PrePos, e.Move.PreRot, preScale)
                     ? UndoResult.Applied : UndoResult.Stale;
 
             case EditKind.Profile:
@@ -334,14 +334,14 @@ public class ManageSheets : MonoBehaviour
 
             case EditKind.Filter:
                 if (_bound == null) return UndoResult.Unreachable;
-                if (e.filterIsRow) _bound.SetHiddenRows(e.filterPreHidden, out _);
-                else _bound.SetHiddenGroups(e.filterPreHidden, out _);
+                if (e.FilterIsRow) _bound.SetHiddenRows(e.FilterPreHidden, out _);
+                else _bound.SetHiddenGroups(e.FilterPreHidden, out _);
                 return UndoResult.Applied;
 
             case EditKind.Sort:
                 if (_bound == null) return UndoResult.Unreachable;
                 bool reordered = false;
-                WithoutReflow(() => reordered = _bound.SetOrder(e.reorderIsColumn, e.reorderPreOrder));
+                WithoutReflow(() => reordered = _bound.SetOrder(e.ReorderIsColumn, e.ReorderPreOrder));
                 return reordered ? UndoResult.Applied : UndoResult.Stale;
         }
 
@@ -355,18 +355,18 @@ public class ManageSheets : MonoBehaviour
         for (int i = 0; i < edits.Count; i++)
         {
             Edit e = edits[i];
-            switch (e.kind)
+            switch (e.Kind)
             {
                 case EditKind.Move:
                 case EditKind.Rotate:
                 case EditKind.Scale:
-                    Vector3 scale = OrOne(e.move.postScale);
-                    RestoreSheetPose(e.move.sheetId, e.move.postPos, e.move.postRot, scale);
+                    Vector3 scale = OrOne(e.Move.PostScale);
+                    RestoreSheetPose(e.Move.SheetId, e.Move.PostPos, e.Move.PostRot, scale);
                     break;
 
                 case EditKind.Filter:
-                    if (e.filterIsRow) _bound.SetHiddenRows(e.filterPostHidden, out _);
-                    else _bound.SetHiddenGroups(e.filterPostHidden, out _);
+                    if (e.FilterIsRow) _bound.SetHiddenRows(e.FilterPostHidden, out _);
+                    else _bound.SetHiddenGroups(e.FilterPostHidden, out _);
                     break;
 
             }
@@ -380,7 +380,7 @@ public class ManageSheets : MonoBehaviour
     public bool PushProjection(ProjectionRecord rec, EditKind kind)
     {
         if (_bound == null) return false;
-        if (_hasProjection && SameRecord(_projection.rec, rec)) return false;
+        if (_hasProjection && SameRecord(_projection.Rec, rec)) return false;
 
         ManageDatasets.ActiveEdits.PushProjection(rec, kind);
         SyncProjectionToStack(StateChannel.InAgentCall);
@@ -395,12 +395,12 @@ public class ManageSheets : MonoBehaviour
         for (int i = edits.Count - 1; i >= 0; i--)
         {
             Edit e = edits[i];
-            if (e.kind != EditKind.Profile) continue;
+            if (e.Kind != EditKind.Profile) continue;
 
-            if (_hasProjection && SameRecord(_projection.rec, e.projection)) return;
+            if (_hasProjection && SameRecord(_projection.Rec, e.Projection)) return;
 
             ClearProjection();
-            ShowProjection(e.projection, animateNew);
+            ShowProjection(e.Projection, animateNew);
             return;
         }
 
@@ -410,7 +410,7 @@ public class ManageSheets : MonoBehaviour
     public void CollectProjections(List<ProjectionRecord> into)
     {
         into.Clear();
-        if (_hasProjection) into.Add(_projection.rec);
+        if (_hasProjection) into.Add(_projection.Rec);
     }
 
     public bool TryResolveProjection(ProjectionRecord rec, out int visRow, out int visCol)
@@ -418,8 +418,8 @@ public class ManageSheets : MonoBehaviour
         visRow = visCol = -1;
         if (_bound == null) return false;
 
-        visRow = _bound.VisIndexOf(false, rec.dataRow);
-        visCol = _bound.VisIndexOf(true, rec.dataCol);
+        visRow = _bound.VisIndexOf(false, rec.DataRow);
+        visCol = _bound.VisIndexOf(true, rec.DataCol);
         return visRow >= 0 && visCol >= 0;
     }
 
@@ -427,11 +427,11 @@ public class ManageSheets : MonoBehaviour
     // that metric names the same strip.
     private bool SameRecord(ProjectionRecord a, ProjectionRecord b)
     {
-        if (a.isColumn != b.isColumn) return false;
-        if (!a.isColumn) return a.dataRow == b.dataRow;
+        if (a.IsColumn != b.IsColumn) return false;
+        if (!a.IsColumn) return a.DataRow == b.DataRow;
         return _bound != null && _bound.IsGrouped(true)
-            ? _bound.DataGroupOf(a.dataCol) == _bound.DataGroupOf(b.dataCol)
-            : a.dataCol == b.dataCol;
+            ? _bound.DataGroupOf(a.DataCol) == _bound.DataGroupOf(b.DataCol)
+            : a.DataCol == b.DataCol;
     }
 
     private bool ShowProjection(ProjectionRecord rec, bool animate = false)
@@ -441,7 +441,7 @@ public class ManageSheets : MonoBehaviour
         SheetPiece view = CreateDetachedPiece("Projection_Strip");
         if (view == null) return false;
 
-        Projection p = new Projection { rec = rec, view = view };
+        Projection p = new Projection { Rec = rec, View = view };
         if (!BuildProjection(ref p))
         {
             Destroy(view.gameObject);
@@ -450,7 +450,7 @@ public class ManageSheets : MonoBehaviour
 
         _projection = p;
         _hasProjection = true;
-        if (animate) StartProjectionRise(rec.lift);
+        if (animate) StartProjectionRise(rec.Lift);
         return true;
     }
 
@@ -461,8 +461,8 @@ public class ManageSheets : MonoBehaviour
         if (!isActiveAndEnabled || ActiveMotionSpeed <= 0f || AgentInstant) return;
 
         _projectionRise = maximumHeight + lift;
-        float sourceScale = _projection.source != null
-            ? Mathf.Abs(_projection.source.transform.lossyScale.y)
+        float sourceScale = _projection.Source != null
+            ? Mathf.Abs(_projection.Source.transform.lossyScale.y)
             : 1f;
         PlaceCurrentProjection();
         _projectionRiseRoutine = StartCoroutine(ProjectionRiseRoutine(_projectionRise, _projectionRise * sourceScale));
@@ -488,7 +488,7 @@ public class ManageSheets : MonoBehaviour
 
         StopProjectionRise();
         _projectionRise = 0f;
-        if (_projection.view != null) Destroy(_projection.view.gameObject);
+        if (_projection.View != null) Destroy(_projection.View.gameObject);
         _projection = default;
         _hasProjection = false;
     }
@@ -498,7 +498,7 @@ public class ManageSheets : MonoBehaviour
         if (!_hasProjection) return;
 
         Projection p = _projection;
-        if (p.view != null && BuildProjection(ref p)) { _projection = p; return; }
+        if (p.View != null && BuildProjection(ref p)) { _projection = p; return; }
 
         ClearProjection();
     }
@@ -509,7 +509,7 @@ public class ManageSheets : MonoBehaviour
         if (PlaceProjection(_projection)) return;
 
         Projection p = _projection;
-        if (p.view != null && BuildProjection(ref p)) { _projection = p; return; }
+        if (p.View != null && BuildProjection(ref p)) { _projection = p; return; }
 
         ClearProjection();
     }
@@ -572,36 +572,36 @@ public class ManageSheets : MonoBehaviour
 
     private bool PlaceProjection(Projection p)
     {
-        if (p.view == null || p.source == null || !p.source.IsBuilt) return false;
+        if (p.View == null || p.Source == null || !p.Source.IsBuilt) return false;
 
-        if (!TryStripPoint(p.source, p.rec.isColumn, p.rec.isColumn ? p.visCol : p.visRow,
-                p.rec.lift, out Vector3 world)) return false;
+        if (!TryStripPoint(p.Source, p.Rec.IsColumn, p.Rec.IsColumn ? p.VisCol : p.VisRow,
+                p.Rec.Lift, out Vector3 world)) return false;
 
         if (_projectionRise > 0f)
-            world -= p.source.transform.TransformVector(Vector3.up * _projectionRise);
+            world -= p.Source.transform.TransformVector(Vector3.up * _projectionRise);
 
-        Transform src = p.source.transform;
+        Transform src = p.Source.transform;
 
-        p.view.transform.localPosition = transform.InverseTransformPoint(world);
-        p.view.transform.localRotation = src.localRotation;
-        p.view.transform.localScale = src.localScale;
+        p.View.transform.localPosition = transform.InverseTransformPoint(world);
+        p.View.transform.localRotation = src.localRotation;
+        p.View.transform.localScale = src.localScale;
         return true;
     }
 
     private bool BuildProjection(ref Projection p)
     {
-        if (_bound == null || p.view == null) return false;
+        if (_bound == null || p.View == null) return false;
 
-        int visRow = _bound.VisIndexOf(false, p.rec.dataRow);
-        int visCol = _bound.VisIndexOf(true, p.rec.dataCol);
+        int visRow = _bound.VisIndexOf(false, p.Rec.DataRow);
+        int visCol = _bound.VisIndexOf(true, p.Rec.DataCol);
         if (visRow < 0 || visCol < 0) return false;
 
         SheetPiece source = SheetAt(visRow, visCol);
         if (source == null) return false;
 
-        p.source = source;
-        p.visRow = visRow;
-        p.visCol = visCol;
+        p.Source = source;
+        p.VisRow = visRow;
+        p.VisCol = visCol;
 
         return BuildStripProjection(ref p, source, visRow, visCol);
     }
@@ -609,11 +609,11 @@ public class ManageSheets : MonoBehaviour
     private bool BuildStripProjection(ref Projection p, SheetPiece source,
         int visRow, int visCol)
     {
-        ProjectionRecord rec = p.rec;
-        SheetPiece view = p.view;
+        ProjectionRecord rec = p.Rec;
+        SheetPiece view = p.View;
         int rMin, rMax, cMin, cMax;
 
-        if (rec.isColumn)
+        if (rec.IsColumn)
         {
             rMin = source.rowMin; rMax = source.rowMax;
             ColumnStripSpan(source, visCol, out cMin, out cMax);
@@ -702,12 +702,12 @@ public class ManageSheets : MonoBehaviour
 
     private struct LineMove
     {
-        public SheetPiece piece;
-        public bool columns;
-        public int line;
-        public float from;
-        public float to;
-        public float duration;
+        public SheetPiece Piece;
+        public bool Columns;
+        public int Line;
+        public float From;
+        public float To;
+        public float Duration;
     }
 
     private Coroutine _reflow;
@@ -716,17 +716,17 @@ public class ManageSheets : MonoBehaviour
 
     private class GlideState
     {
-        public Vector3 toPos;
-        public Quaternion toRot;
-        public Vector3 toScale;
-        public Coroutine routine;
+        public Vector3 ToPos;
+        public Quaternion ToRot;
+        public Vector3 ToScale;
+        public Coroutine Routine;
     }
 
     private class TransformGlide
     {
-        public Coroutine routine;
-        public Vector3 toPos;
-        public Quaternion toRot;
+        public Coroutine Routine;
+        public Vector3 ToPos;
+        public Quaternion ToRot;
     }
 
     private readonly Dictionary<SheetPiece, GlideState> _pieceGlides = new Dictionary<SheetPiece, GlideState>();
@@ -736,9 +736,9 @@ public class ManageSheets : MonoBehaviour
     {
         if (_pieceGlides.TryGetValue(piece, out GlideState g))
         {
-            pos = g.toPos;
-            rot = g.toRot;
-            scale = g.toScale;
+            pos = g.ToPos;
+            rot = g.ToRot;
+            scale = g.ToScale;
             return;
         }
 
@@ -751,9 +751,9 @@ public class ManageSheets : MonoBehaviour
     public void CompleteTransformMotion(Transform target)
     {
         if (target == null || !_transformGlides.TryGetValue(target, out TransformGlide g)) return;
-        if (g.routine != null) StopCoroutine(g.routine);
+        if (g.Routine != null) StopCoroutine(g.Routine);
         _transformGlides.Remove(target);
-        target.SetPositionAndRotation(g.toPos, g.toRot);
+        target.SetPositionAndRotation(g.ToPos, g.ToRot);
     }
 
     // Runs a change whose rebuild should snap rather than reflow. The rebuild is
@@ -866,7 +866,7 @@ public class ManageSheets : MonoBehaviour
         if (moves.Count == 0) return;
 
         for (int i = 0; i < moves.Count; i++)
-            moves[i].piece.LayoutLine(moves[i].columns, moves[i].line, moves[i].from);
+            moves[i].Piece.LayoutLine(moves[i].Columns, moves[i].Line, moves[i].From);
         _reflowMoves = moves;
         _reflow = StartCoroutine(ReflowRoutine(moves));
     }
@@ -888,12 +888,12 @@ public class ManageSheets : MonoBehaviour
             float axisScale = Mathf.Abs(columns ? lossy.x : lossy.z);
             moves.Add(new LineMove
             {
-                piece = s,
-                columns = columns,
-                line = v,
-                from = from,
-                to = to,
-                duration = MotionDuration(Mathf.Abs(from - to) * axisScale)
+                Piece = s,
+                Columns = columns,
+                Line = v,
+                From = from,
+                To = to,
+                Duration = MotionDuration(Mathf.Abs(from - to) * axisScale)
             });
         }
     }
@@ -910,9 +910,9 @@ public class ManageSheets : MonoBehaviour
             for (int i = 0; i < moves.Count; i++)
             {
                 LineMove m = moves[i];
-                if (m.piece == null) continue;
-                float k = Mathf.Clamp01(t / m.duration);
-                m.piece.LayoutLine(m.columns, m.line, Mathf.Lerp(m.from, m.to, k));
+                if (m.Piece == null) continue;
+                float k = Mathf.Clamp01(t / m.Duration);
+                m.Piece.LayoutLine(m.Columns, m.Line, Mathf.Lerp(m.From, m.To, k));
                 if (k < 1f) moving = true;
             }
         }
@@ -928,7 +928,7 @@ public class ManageSheets : MonoBehaviour
         for (int i = 0; i < _reflowMoves.Count; i++)
         {
             LineMove m = _reflowMoves[i];
-            if (m.piece != null) m.piece.LayoutLine(m.columns, m.line, m.to);
+            if (m.Piece != null) m.Piece.LayoutLine(m.Columns, m.Line, m.To);
         }
         _reflowMoves = null;
     }
@@ -938,9 +938,9 @@ public class ManageSheets : MonoBehaviour
         if (!StopGlide(piece, out GlideState g)) return;
 
         Transform t = piece.transform;
-        t.localPosition = g.toPos;
-        t.localRotation = g.toRot;
-        t.localScale = g.toScale;
+        t.localPosition = g.ToPos;
+        t.localRotation = g.ToRot;
+        t.localScale = g.ToScale;
     }
 
     public void Interrupt()
@@ -955,7 +955,7 @@ public class ManageSheets : MonoBehaviour
         }
 
         foreach (KeyValuePair<Transform, TransformGlide> kv in _transformGlides)
-            if (kv.Value.routine != null) StopCoroutine(kv.Value.routine);
+            if (kv.Value.Routine != null) StopCoroutine(kv.Value.Routine);
         _transformGlides.Clear();
 
         CompleteReflow();
@@ -976,14 +976,14 @@ public class ManageSheets : MonoBehaviour
         for (int i = edits.Count - 1; i >= 0; i--)
         {
             Edit e = edits[i];
-            if (e.kind != EditKind.Sort || e.reorderPreOrder == null) continue;
+            if (e.Kind != EditKind.Sort || e.ReorderPreOrder == null) continue;
 
-            IReadOnlyList<int> live = _bound.OrderOf(e.reorderIsColumn);
+            IReadOnlyList<int> live = _bound.OrderOf(e.ReorderIsColumn);
             int changed = 0;
-            for (int v = 0; v < live.Count && v < e.reorderPreOrder.Count; v++)
-                if (live[v] != e.reorderPreOrder[v]) changed++;
+            for (int v = 0; v < live.Count && v < e.ReorderPreOrder.Count; v++)
+                if (live[v] != e.ReorderPreOrder[v]) changed++;
 
-            e.reorderLines = changed;
+            e.ReorderLines = changed;
             if (changed == 0) edits.DropAt(i);
             return;
         }
@@ -1002,21 +1002,21 @@ public class ManageSheets : MonoBehaviour
         for (int i = edits.Count - 1; i >= 0; i--)
         {
             Edit e = edits[i];
-            if (e.kind != EditKind.Move && e.kind != EditKind.Rotate && e.kind != EditKind.Scale) continue;
-            if (e.move.sheetId != piece.sheetId) continue;
+            if (e.Kind != EditKind.Move && e.Kind != EditKind.Rotate && e.Kind != EditKind.Scale) continue;
+            if (e.Move.SheetId != piece.sheetId) continue;
 
             Transform t = piece.transform;
-            MoveRecord m = e.move;
-            m.postPos = t.localPosition;
-            m.postRot = t.localRotation;
-            m.postScale = t.localScale;
-            m.distance = transform.TransformVector(m.postPos - m.prePos).magnitude;
-            e.move = m;
+            MoveRecord m = e.Move;
+            m.PostPos = t.localPosition;
+            m.PostRot = t.localRotation;
+            m.PostScale = t.localScale;
+            m.Distance = transform.TransformVector(m.PostPos - m.PrePos).magnitude;
+            e.Move = m;
 
-            Vector3 preScale = OrOne(m.preScale);
-            if ((m.postPos - m.prePos).sqrMagnitude < 1e-8f &&
-                Quaternion.Angle(m.postRot, m.preRot) < 0.01f &&
-                (m.postScale - preScale).sqrMagnitude < 1e-8f)
+            Vector3 preScale = OrOne(m.PreScale);
+            if ((m.PostPos - m.PrePos).sqrMagnitude < 1e-8f &&
+                Quaternion.Angle(m.PostRot, m.PreRot) < 0.01f &&
+                (m.PostScale - preScale).sqrMagnitude < 1e-8f)
                 edits.DropAt(i);
             return;
         }
@@ -1030,7 +1030,7 @@ public class ManageSheets : MonoBehaviour
     {
         g = default;
         if (ReferenceEquals(piece, null) || !_pieceGlides.TryGetValue(piece, out g)) return false;
-        if (g.routine != null) StopCoroutine(g.routine);
+        if (g.Routine != null) StopCoroutine(g.Routine);
         _pieceGlides.Remove(piece);
         return piece != null;
     }
@@ -1042,22 +1042,22 @@ public class ManageSheets : MonoBehaviour
         CompletePieceMotion(piece);
 
         Transform t = piece.transform;
-        var g = new GlideState { toPos = t.localPosition, toRot = t.localRotation, toScale = t.localScale };
+        var g = new GlideState { ToPos = t.localPosition, ToRot = t.localRotation, ToScale = t.localScale };
 
         float rootScale = Mathf.Abs(transform.lossyScale.x);
         float radius = PieceRadius(piece) * rootScale;
-        float atScale = radius * Mathf.Max(Mathf.Abs(preScale.x), Mathf.Abs(g.toScale.x));
+        float atScale = radius * Mathf.Max(Mathf.Abs(preScale.x), Mathf.Abs(g.ToScale.x));
 
-        float moveMeters = transform.TransformVector(g.toPos - prePos).magnitude;
-        float turnMeters = Quaternion.Angle(preRot, g.toRot) * Mathf.Deg2Rad * atScale;
-        float scaleMeters = Mathf.Abs(g.toScale.x - preScale.x) * radius;
+        float moveMeters = transform.TransformVector(g.ToPos - prePos).magnitude;
+        float turnMeters = Quaternion.Angle(preRot, g.ToRot) * Mathf.Deg2Rad * atScale;
+        float scaleMeters = Mathf.Abs(g.ToScale.x - preScale.x) * radius;
         float duration = MotionDuration(Mathf.Max(moveMeters, Mathf.Max(turnMeters, scaleMeters)));
 
         t.localPosition = prePos;
         t.localRotation = preRot;
         t.localScale = preScale;
 
-        g.routine = StartCoroutine(PieceGlideRoutine(piece, g, prePos, preRot, preScale, duration));
+        g.Routine = StartCoroutine(PieceGlideRoutine(piece, g, prePos, preRot, preScale, duration));
         _pieceGlides[piece] = g;
     }
 
@@ -1073,9 +1073,9 @@ public class ManageSheets : MonoBehaviour
             t += Time.deltaTime;
             float k = Mathf.Clamp01(t / duration);
             Transform tr = piece.transform;
-            tr.localPosition = Vector3.Lerp(fromPos, g.toPos, k);
-            tr.localRotation = Quaternion.Slerp(fromRot, g.toRot, k);
-            tr.localScale = Vector3.Lerp(fromScale, g.toScale, k);
+            tr.localPosition = Vector3.Lerp(fromPos, g.ToPos, k);
+            tr.localRotation = Quaternion.Slerp(fromRot, g.ToRot, k);
+            tr.localScale = Vector3.Lerp(fromScale, g.ToScale, k);
         }
         _pieceGlides.Remove(piece);
     }
@@ -1085,7 +1085,7 @@ public class ManageSheets : MonoBehaviour
         if (target == null || !isActiveAndEnabled) return;
         if (_transformGlides.TryGetValue(target, out TransformGlide running))
         {
-            if (running.routine != null) StopCoroutine(running.routine);
+            if (running.Routine != null) StopCoroutine(running.Routine);
             _transformGlides.Remove(target);
         }
         if (AgentInstant) return;
@@ -1099,9 +1099,9 @@ public class ManageSheets : MonoBehaviour
         float duration = MotionDuration(Mathf.Max((toPos - preWorldPos).magnitude, turnMeters));
 
         target.SetPositionAndRotation(preWorldPos, preWorldRot);
-        var glide = new TransformGlide { toPos = toPos, toRot = toRot };
+        var glide = new TransformGlide { ToPos = toPos, ToRot = toRot };
         _transformGlides[target] = glide;
-        glide.routine = StartCoroutine(
+        glide.Routine = StartCoroutine(
             TransformGlideRoutine(target, preWorldPos, preWorldRot, toPos, toRot, duration));
     }
 
@@ -1207,7 +1207,7 @@ public class ManageSheets : MonoBehaviour
     {
         StopReflow();
         foreach (GlideState g in _pieceGlides.Values)
-            if (g.routine != null) StopCoroutine(g.routine);
+            if (g.Routine != null) StopCoroutine(g.Routine);
         _pieceGlides.Clear();
         for (int i = 0; i < _sheets.Count; i++)
             if (_sheets[i] != null) Destroy(_sheets[i].gameObject);

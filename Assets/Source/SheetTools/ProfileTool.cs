@@ -7,7 +7,7 @@ public class ProfileTool : Tool
     [Tooltip("How far a pressed finger must travel, in cells, before the sweep direction chooses the axis.")]
     public float travelCells = 0.6f;
 
-    private readonly AxisIntent _intent = new AxisIntent { deadband = 0.25f };
+    private readonly AxisIntent _intent = new AxisIntent { Deadband = 0.25f };
     private bool _pressed;
     private Vector3 _pressLocal;
 
@@ -29,23 +29,23 @@ public class ProfileTool : Tool
     }
 
     private static bool Usable(ReadSheets.Reading reading) =>
-        reading.valid && reading.cube != null && reading.sheet != null;
+        reading.Valid && reading.Cube != null && reading.Sheet != null;
 
     private void Tint(ReadSheets.Reading reading, float swell) => TintLine(reading, _intent.Columns, swell);
 
     private void FeedReach(ReadSheets.Reading reading)
     {
-        if (reading.tip == Vector3.zero) return;
-        if (AxisIntent.ReachScores(reading.sheet, reading.wrist, reading.tip, out float forColumns, out float forRows))
+        if (reading.Tip == Vector3.zero) return;
+        if (AxisIntent.ReachScores(reading.Sheet, reading.Wrist, reading.Tip, out float forColumns, out float forRows))
             _intent.Feed(forColumns, forRows);
     }
 
     private void FeedSweep(ReadSheets.Reading reading)
     {
-        if (reading.tip == Vector3.zero) return;
+        if (reading.Tip == Vector3.zero) return;
 
-        Vector3 delta = reading.sheet.transform.InverseTransformPoint(reading.tip) - _pressLocal;
-        float travel = travelCells * reading.sheet.CellSize;
+        Vector3 delta = reading.Sheet.transform.InverseTransformPoint(reading.Tip) - _pressLocal;
+        float travel = travelCells * reading.Sheet.CellSize;
         if (Mathf.Max(Mathf.Abs(delta.x), Mathf.Abs(delta.z)) < travel) return;
 
         AxisIntent.SweepScores(delta, out float forColumns, out float forRows);
@@ -79,8 +79,8 @@ public class ProfileTool : Tool
 
         FeedReach(reading);
         _pressed = true;
-        _pressLocal = reading.sheet.transform.InverseTransformPoint(
-            reading.tip == Vector3.zero ? reading.point : reading.tip);
+        _pressLocal = reading.Sheet.transform.InverseTransformPoint(
+            reading.Tip == Vector3.zero ? reading.Point : reading.Tip);
 
         if (_intent.Decided) Tint(reading, Style.PreviewSwell + Style.EngageSwell);
     }
@@ -105,7 +105,7 @@ public class ProfileTool : Tool
         if (!Active || sheetManager == null || !Usable(reading) || !_intent.Decided) return;
 
         bool columns = _intent.Columns;
-        if (!Project(columns, reading.cube.dataRow, reading.cube.dataCol, reading.visRow, reading.visCol)) return;
+        if (!Project(columns, reading.Cube.dataRow, reading.Cube.dataCol, reading.VisRow, reading.VisCol)) return;
 
         ShowStats(columns, reading);
     }
@@ -115,7 +115,7 @@ public class ProfileTool : Tool
         if (!StatsTooltip.TryResolve(sheetManager, reading,
                 out Tooltip tooltip, out DataSource data, out SheetPiece piece)) return;
 
-        int line = columns ? reading.visCol : reading.visRow;
+        int line = columns ? reading.VisCol : reading.VisRow;
         string name = columns && data.IsGrouped(true)
             ? DataSource.GroupLabelAt(data, true, data.GroupOf(true, line))
             : data.TitleAt(columns, line);
@@ -128,8 +128,8 @@ public class ProfileTool : Tool
         int colHi = piece.colMax;
         if (!columns && data.IsGrouped(true))
         {
-            sheetManager.ColumnStripSpan(piece, reading.visCol, out colLo, out colHi);
-            title += " · " + DataSource.GroupLabelAt(data, true, data.GroupOf(true, reading.visCol));
+            sheetManager.ColumnStripSpan(piece, reading.VisCol, out colLo, out colHi);
+            title += " · " + DataSource.GroupLabelAt(data, true, data.GroupOf(true, reading.VisCol));
         }
 
         // A column strip raises the whole metric, so its summary covers every year.
@@ -138,8 +138,8 @@ public class ProfileTool : Tool
 
         Tooltip.SelectionStats selection = new Tooltip.SelectionStats
         {
-            title = title,
-            stats = columns
+            Title = title,
+            Stats = columns
                 ? SheetStats.Over(data, piece.rowMin, piece.rowMax, stripLo, stripHi)
                 : SheetStats.Over(data, line, line, colLo, colHi)
         };
@@ -147,7 +147,7 @@ public class ProfileTool : Tool
         ManageSheets sheets = sheetManager;
         SheetPiece target = piece;
         float lift = liftAboveMaximumHeight;
-        Vector3 fallback = reading.point;
+        Vector3 fallback = reading.Point;
 
         tooltip.ShowStats(
             () => sheets != null && sheets.TryStripTopPoint(target, columns, line, lift, out Vector3 raised)
@@ -170,10 +170,10 @@ public class ProfileTool : Tool
     {
         ProjectionRecord rec = new ProjectionRecord
         {
-            isColumn = columns,
-            dataRow = dataRow,
-            dataCol = dataCol,
-            lift = liftAboveMaximumHeight
+            IsColumn = columns,
+            DataRow = dataRow,
+            DataCol = dataCol,
+            Lift = liftAboveMaximumHeight
         };
 
         if (!sheetManager.PushProjection(rec, EditKind.Profile)) return false;

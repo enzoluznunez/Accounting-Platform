@@ -20,8 +20,8 @@ public class SheetTouch : MonoBehaviour
 
     private struct Source
     {
-        public PokeInteractor poke;
-        public IHand hand;
+        public PokeInteractor Poke;
+        public IHand Hand;
     }
 
     private ReadSheets _hub;
@@ -51,7 +51,7 @@ public class SheetTouch : MonoBehaviour
             Source source = _pokes[i];
             if (!Live(source)) continue;
             if (!Acquire(source)) continue;
-            _driver = source.poke;
+            _driver = source.Poke;
             return;
         }
     }
@@ -67,7 +67,7 @@ public class SheetTouch : MonoBehaviour
         {
             IHand hand = found[i].GetComponentInParent<IHand>();
             if (hand == null) continue;
-            _pokes.Add(new Source { poke = found[i], hand = hand });
+            _pokes.Add(new Source { Poke = found[i], Hand = hand });
         }
 
         // Until a hand turns up, look again soon rather than every frame.
@@ -76,9 +76,9 @@ public class SheetTouch : MonoBehaviour
 
     private bool Live(Source source)
     {
-        PokeInteractor poke = source.poke;
+        PokeInteractor poke = source.Poke;
         if (poke == null || !poke.isActiveAndEnabled) return false;
-        if (source.hand == null || !source.hand.IsTrackedDataValid) return false;
+        if (source.Hand == null || !source.Hand.IsTrackedDataValid) return false;
 
         Transform head = CameraRig.MainTransform;
         if (head == null) return false;
@@ -90,23 +90,23 @@ public class SheetTouch : MonoBehaviour
     private Source Current()
     {
         for (int i = 0; i < _pokes.Count; i++)
-            if (_pokes[i].poke == _driver) return _pokes[i];
+            if (_pokes[i].Poke == _driver) return _pokes[i];
         return default;
     }
 
     private static Vector3 WristOf(Source source, Vector3 tip) =>
-        source.hand != null && source.hand.GetJointPose(HandJointId.HandWristRoot, out Pose wrist)
+        source.Hand != null && source.Hand.GetJointPose(HandJointId.HandWristRoot, out Pose wrist)
             ? wrist.position
             : tip;
 
     private bool Acquire(Source source)
     {
-        PokeInteractor poke = source.poke;
+        PokeInteractor poke = source.Poke;
         Vector3 tip = poke.Origin;
         float reach = Mathf.Max(poke.Radius, 0f) + Mathf.Max(hoverEnter, 0f);
         if (!SheetRaycast.NearestCube(tip, reach, out SheetRaycast.Hit hit)) return false;
 
-        _cube = hit.cube;
+        _cube = hit.Cube;
         _selected = false;
         _hub.Hover(ReadSheets.Describe(hit, tip, WristOf(source, tip)));
         return true;
@@ -124,11 +124,11 @@ public class SheetTouch : MonoBehaviour
         if (!SheetRaycast.NearestCube(tip, reach, out SheetRaycast.Hit hit)) return false;
 
         ReadSheets.Reading reading = ReadSheets.Describe(hit, tip, WristOf(source, tip));
-        _cube = hit.cube;
+        _cube = hit.Cube;
 
         if (_selected)
         {
-            if (hit.distance <= radius + Mathf.Max(hoverExit, 0f))
+            if (hit.Distance <= radius + Mathf.Max(hoverExit, 0f))
             {
                 _hub.Hover(reading);
                 return true;
@@ -139,7 +139,7 @@ public class SheetTouch : MonoBehaviour
             return true;
         }
 
-        if (hit.distance <= radius || SheetRaycast.Contains(hit.cube, tip))
+        if (hit.Distance <= radius || SheetRaycast.Contains(hit.Cube, tip))
         {
             _selected = true;
             _hub.Select(reading);

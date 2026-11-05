@@ -242,7 +242,7 @@ public sealed class OpenIndustrySheet : AgenticTool {
             return;
         }
 
-        result["opened"] = added.label;
+        result["opened"] = added.Label;
         result["companies"] = data.RowOrder.Count;
         result["metrics"] = data.GroupCount(true);
         result["years"] = new List<object>(data.SeriesTitles);

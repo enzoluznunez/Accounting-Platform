@@ -135,13 +135,13 @@ public class IndustryCatalog : MonoBehaviour
         int spanning = 0;
         for (int i = rows.Count - 1; i >= 0; i--)
         {
-            entries.Add((SheetUrl(rows[i].division), rows[i].division,
-                         Math.Min(rows[i].companies, SheetLimit)));
+            entries.Add((SheetUrl(rows[i].Division), rows[i].Division,
+                         Math.Min(rows[i].Companies, SheetLimit)));
 
             // An industry with fewer companies than the per-industry share
             // contributes all it has and no more, so the sheet spanning them is
             // shorter than the share times the count.
-            spanning += Math.Min(rows[i].companies, PerIndustry);
+            spanning += Math.Min(rows[i].Companies, PerIndustry);
         }
         string spanningUrl = SheetUrl(null);
         entries.Add((spanningUrl, allIndustriesLabel, Math.Min(spanning, SheetLimit)));
@@ -164,7 +164,7 @@ public class IndustryCatalog : MonoBehaviour
         var datasets = manageDatasets.Datasets;
         for (int i = 0; i < datasets.Count; i++)
         {
-            if (datasets[i].payload != url) continue;
+            if (datasets[i].Payload != url) continue;
             manageDatasets.SwitchDataset(i);
             return;
         }
@@ -183,8 +183,8 @@ public class IndustryCatalog : MonoBehaviour
 
     private struct Row
     {
-        public string division;
-        public int companies;
+        public string Division;
+        public int Companies;
     }
 
     private static List<Row> Read(string json)
@@ -200,8 +200,8 @@ public class IndustryCatalog : MonoBehaviour
 
             rows.Add(new Row
             {
-                division = division,
-                companies = row.GetProperty("companies").GetInt32()
+                Division = division,
+                Companies = row.GetProperty("companies").GetInt32()
             });
         }
         return rows;

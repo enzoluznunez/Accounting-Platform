@@ -22,8 +22,8 @@ public class Tooltip : MonoBehaviour
 
     public struct SelectionStats
     {
-        public string title;
-        public SheetStats.Summary stats;
+        public string Title;
+        public SheetStats.Summary Stats;
     }
 
     private Canvas _canvas;
@@ -149,9 +149,9 @@ public class Tooltip : MonoBehaviour
         _statsGroup.SetActive(true);
 
         if (_statsTitle != null)
-            _statsTitle.text = string.IsNullOrEmpty(selection.title) ? Dash : selection.title;
+            _statsTitle.text = string.IsNullOrEmpty(selection.Title) ? Dash : selection.Title;
 
-        FillStats(_statCells, selection.stats);
+        FillStats(_statCells, selection.Stats);
 
         _pendingStats = selection;
         _pendingAnchor = anchor;
@@ -180,12 +180,12 @@ public class Tooltip : MonoBehaviour
     {
         if (cells == null) return;
 
-        bool empty = !summary.valid;
-        SetCell(cells, 0, empty ? Dash : Formatter.Compact(summary.mean));
-        SetCell(cells, 1, empty ? Dash : Formatter.Count(summary.count));
-        SetCell(cells, 2, empty ? Dash : Formatter.Compact(summary.min));
-        SetCell(cells, 3, empty ? Dash : Formatter.Compact(summary.max));
-        SetCell(cells, 4, empty ? Dash : Formatter.Compact(summary.sum));
+        bool empty = !summary.Valid;
+        SetCell(cells, 0, empty ? Dash : Formatter.Compact(summary.Mean));
+        SetCell(cells, 1, empty ? Dash : Formatter.Count(summary.Count));
+        SetCell(cells, 2, empty ? Dash : Formatter.Compact(summary.Min));
+        SetCell(cells, 3, empty ? Dash : Formatter.Compact(summary.Max));
+        SetCell(cells, 4, empty ? Dash : Formatter.Compact(summary.Sum));
     }
 
     private static void SetCell(TextMeshProUGUI[] cells, int index, string text)

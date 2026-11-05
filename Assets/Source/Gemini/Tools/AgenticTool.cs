@@ -349,10 +349,10 @@ public abstract class AgenticTool : Function {
     }
 
     protected readonly struct PiecePose {
-        public readonly UnityEngine.Vector3 pos;
-        public readonly UnityEngine.Quaternion rot;
-        public readonly UnityEngine.Vector3 scale;
-        public PiecePose(UnityEngine.Transform t) { pos = t.localPosition; rot = t.localRotation; scale = t.localScale; }
+        public readonly UnityEngine.Vector3 Pos;
+        public readonly UnityEngine.Quaternion Rot;
+        public readonly UnityEngine.Vector3 Scale;
+        public PiecePose(UnityEngine.Transform t) { Pos = t.localPosition; Rot = t.localRotation; Scale = t.localScale; }
     }
 
     protected static bool TryResolveSheet(Dictionary<string, object> result,
@@ -368,8 +368,8 @@ public abstract class AgenticTool : Function {
         UnityEngine.Transform t = sheet.transform;
         var pre = new PiecePose(t);
         mutate(t);
-        mgr.NotifyMoveCommitted(sheet, pre.pos, pre.rot, pre.scale);
-        mgr.AnimatePieceFrom(sheet, pre.pos, pre.rot, pre.scale);
+        mgr.NotifyMoveCommitted(sheet, pre.Pos, pre.Rot, pre.Scale);
+        mgr.AnimatePieceFrom(sheet, pre.Pos, pre.Rot, pre.Scale);
         return pre;
     }
 
@@ -470,12 +470,12 @@ public abstract class AgenticTool : Function {
         SheetStats.Summary s = isColumn
             ? SheetStats.Over(data, crossMin, crossMax, line, line)
             : SheetStats.Over(data, line, line, crossMin, crossMax);
-        if (!s.valid) return false;
+        if (!s.Valid) return false;
         switch (measure) {
-            case "sum": score = s.sum; return true;
-            case "average": score = s.mean; return true;
-            case "max": score = s.max; return true;
-            case "min": score = s.min; return true;
+            case "sum": score = s.Sum; return true;
+            case "average": score = s.Mean; return true;
+            case "max": score = s.Max; return true;
+            case "min": score = s.Min; return true;
             default: return false;
         }
     }

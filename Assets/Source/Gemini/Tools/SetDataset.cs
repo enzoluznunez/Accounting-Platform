@@ -33,7 +33,7 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
             var datasets = Scene.Datasets;
             if (datasets == null || bound == null) return;
             if (!TryResolveIndex(datasets, bound.dataset?.Trim(), out int index)) return;
-            if (datasets.Datasets[index].loaded) return;
+            if (datasets.Datasets[index].Loaded) return;
             reading = datasets.EnsureLoaded(index);
         }).ConfigureAwait(false);
 
@@ -54,8 +54,8 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
             return;
         }
 
-        if (!datasets.Datasets[index].loaded) {
-            result["error"] = $"{datasets.Datasets[index].label} could not be read, so it is not open.";
+        if (!datasets.Datasets[index].Loaded) {
+            result["error"] = $"{datasets.Datasets[index].Label} could not be read, so it is not open.";
             result["available"] = ListLabels(datasets);
             return;
         }
@@ -64,7 +64,7 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
 
         if (!alreadyActive) datasets.SwitchDataset(index);
 
-        result["switched"] = datasets.Datasets[index].label;
+        result["switched"] = datasets.Datasets[index].Label;
         result["fromTop"] = datasets.DatasetCount - index;
         if (alreadyActive) result["alreadyActive"] = true;
 
@@ -92,7 +92,7 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
         var list = datasets.Datasets;
         int exact = -1, exactHits = 0;
         for (int i = 0; i < list.Count; i++)
-            if (string.Equals(list[i].label, query, StringComparison.OrdinalIgnoreCase)) { exact = i; exactHits++; }
+            if (string.Equals(list[i].Label, query, StringComparison.OrdinalIgnoreCase)) { exact = i; exactHits++; }
         if (exactHits == 1) { index = exact; return true; }
         if (exactHits > 1) return false;
 
@@ -104,7 +104,7 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
         int only = -1, hits = 0;
         for (int i = 0; i < list.Count; i++)
         {
-            string label = list[i].label;
+            string label = list[i].Label;
             if (string.IsNullOrEmpty(label)) continue;
             if (label.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0 &&
                 query.IndexOf(label, StringComparison.OrdinalIgnoreCase) < 0) continue;
@@ -119,7 +119,7 @@ public sealed class SetDataset : AgenticTool<SetDataset.Args> {
         var list = new List<object>();
         var all = datasets.Datasets;
         for (int i = all.Count - 1; i >= 0; i--)
-            list.Add(new Dictionary<string, object> { { "name", all[i].label }, { "fromTop", all.Count - i } });
+            list.Add(new Dictionary<string, object> { { "name", all[i].Label }, { "fromTop", all.Count - i } });
         return list;
     }
 }

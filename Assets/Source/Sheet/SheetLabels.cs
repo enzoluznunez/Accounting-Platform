@@ -4,9 +4,9 @@ using UnityEngine;
 
 public struct SheetLabelStyle
 {
-    public bool show;
-    public Color color;
-    public float gap;
+    public bool Show;
+    public Color Color;
+    public float Gap;
 }
 
 public class SheetLabels
@@ -17,10 +17,10 @@ public class SheetLabels
 
     private class Side
     {
-        public bool high;
-        public bool flipping;
-        public bool want;
-        public float fade = 1f;
+        public bool High;
+        public bool Flipping;
+        public bool Want;
+        public float Fade = 1f;
     }
 
     private readonly Transform _owner;
@@ -74,16 +74,16 @@ public class SheetLabels
             return;
         }
 
-        Step(_cols, Decide(local.z, _cols.high), dt, _colLabel, _lowZ, _highZ, true);
-        Step(_rows, Decide(local.x, _rows.high), dt, _rowLabel, _lowX, _highX, false);
+        Step(_cols, Decide(local.z, _cols.High), dt, _colLabel, _lowZ, _highZ, true);
+        Step(_rows, Decide(local.x, _rows.High), dt, _rowLabel, _lowX, _highX, false);
     }
 
     private void Snap(Side side, bool high, Dictionary<int, TextMeshPro> map,
         float lowEdge, float highEdge, bool columns)
     {
-        side.high = high;
-        side.flipping = false;
-        side.fade = 1f;
+        side.High = high;
+        side.Flipping = false;
+        side.Fade = 1f;
 
         ApplyEdges(map, high ? highEdge : lowEdge, columns, high);
         ApplyFades(map, 1f, columns);
@@ -95,30 +95,30 @@ public class SheetLabels
     private void Step(Side side, bool desired, float dt,
         Dictionary<int, TextMeshPro> map, float lowEdge, float highEdge, bool columns)
     {
-        if (!side.flipping && desired != side.high)
+        if (!side.Flipping && desired != side.High)
         {
-            side.flipping = true;
-            side.want = desired;
+            side.Flipping = true;
+            side.Want = desired;
         }
 
-        if (side.flipping)
+        if (side.Flipping)
         {
-            side.fade -= dt / FadeSeconds;
-            if (side.fade <= 0f)
+            side.Fade -= dt / FadeSeconds;
+            if (side.Fade <= 0f)
             {
-                side.fade = 0f;
-                side.high = side.want;
-                side.flipping = false;
-                ApplyEdges(map, side.high ? highEdge : lowEdge, columns, side.high);
+                side.Fade = 0f;
+                side.High = side.Want;
+                side.Flipping = false;
+                ApplyEdges(map, side.High ? highEdge : lowEdge, columns, side.High);
             }
         }
-        else if (side.fade < 1f)
+        else if (side.Fade < 1f)
         {
-            side.fade = Mathf.Min(1f, side.fade + dt / FadeSeconds);
+            side.Fade = Mathf.Min(1f, side.Fade + dt / FadeSeconds);
         }
         else return;
 
-        ApplyFades(map, side.fade, columns);
+        ApplyFades(map, side.Fade, columns);
     }
 
     private const float UpwardTiltDegrees = 45f;
@@ -221,12 +221,12 @@ public class SheetLabels
         _colGroupOut = cellSize * 0.85f;
         _textScale = cellSize > 0f ? cellSize / ReferenceCellSize : 1f;
 
-        _cols.fade = 1f;
-        _cols.flipping = false;
-        _rows.fade = 1f;
-        _rows.flipping = false;
+        _cols.Fade = 1f;
+        _cols.Flipping = false;
+        _rows.Fade = 1f;
+        _rows.Flipping = false;
 
-        if (data != null && style.show && cellSize > 0f)
+        if (data != null && style.Show && cellSize > 0f)
         {
             float centerX = SheetPiece.Center(colMin, colMax, cellSize, _colGroupSize, groupGap);
             float centerZ = SheetPiece.Center(rowMin, rowMax, cellSize, 1, 0f);
@@ -237,14 +237,14 @@ public class SheetLabels
             float RowZ(int vr) => SheetPiece.Raw(vr, cellSize, 1, 0f) - centerZ;
 
             _margin = cellSize;
-            _lowZ = RowZ(rowMin) - half - style.gap;
-            _highZ = RowZ(rowMax) + half + style.gap;
-            _lowX = ColX(colMin) - half - style.gap;
-            _highX = ColX(colMax) + half + style.gap;
+            _lowZ = RowZ(rowMin) - half - style.Gap;
+            _highZ = RowZ(rowMax) + half + style.Gap;
+            _lowX = ColX(colMin) - half - style.Gap;
+            _highX = ColX(colMax) + half + style.Gap;
 
             IReadOnlyList<int> colOrder = data.ColumnOrder;
             IReadOnlyList<string> colTitles = data.ColumnTitles;
-            float edgeZ = _cols.high ? _highZ : _lowZ;
+            float edgeZ = _cols.High ? _highZ : _lowZ;
             bool grouped = _colGroupSize > 1;
             for (int vc = colMin; vc <= colMax; vc++)
             {
@@ -254,33 +254,33 @@ public class SheetLabels
 
                 string text = grouped ? Tick(data.SeriesTitleAt(true, vc)) : colTitles[dCol];
                 TextMeshPro label = Place(text,
-                    new Vector3(ColX(vc), y, edgeZ), style.color,
-                    Facing(true, _cols.high), grouped ? TickScale : 1f);
+                    new Vector3(ColX(vc), y, edgeZ), style.Color,
+                    Facing(true, _cols.High), grouped ? TickScale : 1f);
                 if (label != null) _colLabel[vc] = label;
             }
 
             if (grouped)
             {
-                float groupZ = edgeZ + (_cols.high ? _colGroupOut : -_colGroupOut);
+                float groupZ = edgeZ + (_cols.High ? _colGroupOut : -_colGroupOut);
                 for (int g = 0; g <= colMax / _colGroupSize; g++)
                 {
                     int lo = g * _colGroupSize;
                     if (lo < colMin || lo > colMax) continue;
                     TextMeshPro label = Place(data.GroupTitleAt(true, g),
-                        new Vector3(ColX(lo), y, groupZ), style.color,
-                        Facing(true, _cols.high));
+                        new Vector3(ColX(lo), y, groupZ), style.Color,
+                        Facing(true, _cols.High));
                     if (label == null) continue;
                     _colGroup[g] = label;
                     CentreGroup(g);
                 }
             }
 
-            float edgeX = _rows.high ? _highX : _lowX;
+            float edgeX = _rows.High ? _highX : _lowX;
             for (int vr = rowMin; vr <= rowMax; vr++)
             {
                 TextMeshPro label = Place(data.TitleAt(false, vr),
-                    new Vector3(edgeX, y, RowZ(vr)), style.color,
-                    Facing(false, _rows.high));
+                    new Vector3(edgeX, y, RowZ(vr)), style.Color,
+                    Facing(false, _rows.High));
                 if (label != null) _rowLabel[vr] = label;
             }
         }

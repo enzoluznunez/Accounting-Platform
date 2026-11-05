@@ -902,8 +902,8 @@ public class ToolPanelUI : PanelUI
 
         ButtonList list = new ButtonList(rowRect, new ButtonList.Options
         {
-            axis = ButtonList.Axis.Horizontal,
-            sizing = ButtonList.Sizing.Equal
+            Axis = ButtonList.Axis.Horizontal,
+            Sizing = ButtonList.Sizing.Equal
         });
 
         if (belowHeader) InsertBelowHeader(content, row.transform);
@@ -937,13 +937,13 @@ public class ToolPanelUI : PanelUI
 
         ButtonList list = new ButtonList(rect, new ButtonList.Options
         {
-            axis = ButtonList.Axis.Vertical,
-            sizing = ButtonList.Sizing.Measured,
-            alignment = TextAnchor.UpperLeft,
-            itemHeight = Style.Subbutton.y,
-            backed = true,
-            scrollable = true,
-            checkable = true
+            Axis = ButtonList.Axis.Vertical,
+            Sizing = ButtonList.Sizing.Measured,
+            Alignment = TextAnchor.UpperLeft,
+            ItemHeight = Style.Subbutton.y,
+            Backed = true,
+            Scrollable = true,
+            Checkable = true
         });
 
         host.transform.SetAsLastSibling();

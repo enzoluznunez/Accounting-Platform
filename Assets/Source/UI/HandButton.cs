@@ -290,10 +290,10 @@ public class HandButton : MonoBehaviour
         _lostAt = -1f;
 
         if (!_hasPose) _poseFilter.Reset();
-        _poseFilter.posMinCutoff = posMinCutoff;
-        _poseFilter.posBeta = posBeta;
-        _poseFilter.rotMinCutoff = rotMinCutoff;
-        _poseFilter.rotBeta = rotBeta;
+        _poseFilter.PosMinCutoff = posMinCutoff;
+        _poseFilter.PosBeta = posBeta;
+        _poseFilter.RotMinCutoff = rotMinCutoff;
+        _poseFilter.RotBeta = rotBeta;
 
         float hardening = _ihand.IsHighConfidence ? 1f : lowConfidenceHardening;
         Pose filtered = _poseFilter.Filter(new Pose(position, rotation), Time.unscaledDeltaTime, hardening);

@@ -15,22 +15,22 @@ public class ManageDatasets : MonoBehaviour
 
     public class Dataset
     {
-        public DataSource source;
-        public string label;
-        public string payload;
+        public DataSource Source;
+        public string Label;
+        public string Payload;
 
-        public string DisplayLabel => string.IsNullOrEmpty(label) ? "dataset" : label;
-        public bool loaded;
+        public string DisplayLabel => string.IsNullOrEmpty(Label) ? "dataset" : Label;
+        public bool Loaded;
 
         // A parse is in flight exactly while a reader exists that has not
         // answered yet; the result handler and Unload both clear the reader.
-        public bool Loading => source != null && !loaded;
+        public bool Loading => Source != null && !Loaded;
 
         // Listed from the industry index rather than scanned in: it stands in the
         // rail from startup and is parsed the first time someone opens it, so a
         // session begins with every industry named and none of them read.
-        public bool catalogued;
-        public int companies;
+        public bool Catalogued;
+        public int Companies;
 
         public readonly EditList Edits = new EditList();
     }
@@ -49,7 +49,7 @@ public class ManageDatasets : MonoBehaviour
     public IReadOnlyList<Dataset> Datasets => _datasets;
     public int ActiveIndex => _active;
     public int DatasetCount => _datasets.Count;
-    public DataSource Active => (_active >= 0 && _active < _datasets.Count) ? _datasets[_active].source : null;
+    public DataSource Active => (_active >= 0 && _active < _datasets.Count) ? _datasets[_active].Source : null;
     public Dataset ActiveDataset => (_active >= 0 && _active < _datasets.Count) ? _datasets[_active] : null;
 
     public static EditList ActiveEdits
@@ -85,10 +85,10 @@ public class ManageDatasets : MonoBehaviour
         if (string.IsNullOrEmpty(payload)) return null;
 
         for (int i = 0; i < _datasets.Count; i++)
-            if (_datasets[i].payload == payload)
+            if (_datasets[i].Payload == payload)
             {
                 bool alreadyActive = i == _active;
-                string openLabel = _datasets[i].label;
+                string openLabel = _datasets[i].Label;
                 SwitchDataset(i);
                 Notices.Show(this, "Already Open",
                     alreadyActive ? $"{openLabel} is already open." : $"Switched to {openLabel}.");
@@ -97,8 +97,8 @@ public class ManageDatasets : MonoBehaviour
 
         Dataset dataset = new Dataset
         {
-            payload = payload,
-            label = UniqueLabel(label ?? Stylize(DeriveLabel(payload, _datasetsCreated)))
+            Payload = payload,
+            Label = UniqueLabel(label ?? Stylize(DeriveLabel(payload, _datasetsCreated)))
         };
         _datasets.Add(dataset);
         SwitchDataset(_datasets.Count - 1);
@@ -118,14 +118,14 @@ public class ManageDatasets : MonoBehaviour
         if (string.IsNullOrEmpty(file)) return;
 
         for (int i = 0; i < _datasets.Count; i++)
-            if (_datasets[i].payload == file) return;
+            if (_datasets[i].Payload == file) return;
 
         _datasets.Add(new Dataset
         {
-            payload = file,
-            label = UniqueLabel(string.IsNullOrEmpty(label) ? Stylize(DeriveLabel(file, _datasets.Count)) : label),
-            catalogued = true,
-            companies = companies
+            Payload = file,
+            Label = UniqueLabel(string.IsNullOrEmpty(label) ? Stylize(DeriveLabel(file, _datasets.Count)) : label),
+            Catalogued = true,
+            Companies = companies
         });
     }
 
@@ -145,7 +145,7 @@ public class ManageDatasets : MonoBehaviour
     private bool LabelTaken(string label)
     {
         for (int i = 0; i < _datasets.Count; i++)
-            if (string.Equals(_datasets[i].label, label, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(_datasets[i].Label, label, StringComparison.OrdinalIgnoreCase)) return true;
         return false;
     }
 
@@ -161,7 +161,7 @@ public class ManageDatasets : MonoBehaviour
         if (index < 0 || index >= _datasets.Count) return Task.FromResult(false);
 
         Dataset dataset = _datasets[index];
-        if (dataset.loaded) return Task.FromResult(true);
+        if (dataset.Loaded) return Task.FromResult(true);
 
         if (!_awaitingLoad.TryGetValue(dataset, out TaskCompletionSource<bool> waiting))
         {
@@ -182,22 +182,22 @@ public class ManageDatasets : MonoBehaviour
 
     private void BeginLoad(Dataset dataset)
     {
-        if (dataset == null || dataset.Loading || dataset.loaded) return;
+        if (dataset == null || dataset.Loading || dataset.Loaded) return;
 
         GameObject host = new GameObject($"Dataset_{_datasetsCreated++}");
         host.transform.SetParent(transform, false);
 
         CsvDataSource reader = host.AddComponent<CsvDataSource>();
-        dataset.source = reader;
+        dataset.Source = reader;
 
         reader.onLoadResult = (ok, reason) => OnDatasetLoadResult(reader, ok, reason);
-        reader.Load(dataset.payload);
+        reader.Load(dataset.Payload);
     }
 
     private int IndexOfSource(DataSource source)
     {
         for (int i = 0; i < _datasets.Count; i++)
-            if (_datasets[i].source == source) return i;
+            if (_datasets[i].Source == source) return i;
         return -1;
     }
 
@@ -216,11 +216,11 @@ public class ManageDatasets : MonoBehaviour
         {
             // An industry stays in the rail when its file will not read: it is
             // still one of the industries, and trying again is a tap away.
-            if (dataset.catalogued)
+            if (dataset.Catalogued)
             {
                 Unload(dataset);
                 Notices.Show(this, "Industry Unavailable",
-                    reason ?? $"{dataset.label} could not be read.");
+                    reason ?? $"{dataset.Label} could not be read.");
                 return;
             }
 
@@ -230,9 +230,9 @@ public class ManageDatasets : MonoBehaviour
             return;
         }
 
-        dataset.loaded = true;
+        dataset.Loaded = true;
 
-        StateChannel.Record($"loaded a new dataset, {dataset.label}");
+        StateChannel.Record($"loaded a new dataset, {dataset.Label}");
         if (requested) SwitchDataset(index);
     }
 
@@ -248,7 +248,7 @@ public class ManageDatasets : MonoBehaviour
         _datasets.RemoveAt(index);
         if (_active > index) _active--;
 
-        if (dataset.source != null) Destroy(dataset.source.gameObject);
+        if (dataset.Source != null) Destroy(dataset.Source.gameObject);
     }
 
 
@@ -264,7 +264,7 @@ public class ManageDatasets : MonoBehaviour
         // A listed industry is read here, the first time it is asked for. The
         // parse finishes on a later frame and lands back in OnDatasetLoadResult,
         // which switches to it then, unless something else was asked for since.
-        if (!_datasets[index].loaded)
+        if (!_datasets[index].Loaded)
         {
             _requested = _datasets[index];
             BeginLoad(_datasets[index]);
@@ -285,7 +285,7 @@ public class ManageDatasets : MonoBehaviour
             $"the {next.DisplayLabel} dataset is open" +
             "; row and column numbers and edits all belong to it");
 
-        ReportAxes(next.source);
+        ReportAxes(next.Source);
     }
 
     private static void ReportAxes(DataSource source)
@@ -320,14 +320,14 @@ public class ManageDatasets : MonoBehaviour
     // Gives back everything the parse held, and leaves the entry listed.
     private void Unload(Dataset dataset)
     {
-        dataset.loaded = false;
-        if (dataset.source != null) Destroy(dataset.source.gameObject);
-        dataset.source = null;
+        dataset.Loaded = false;
+        if (dataset.Source != null) Destroy(dataset.Source.gameObject);
+        dataset.Source = null;
     }
 
     private void Rebind(Dataset dataset)
     {
-        TryStep("sheetManager", () => { if (sheetManager != null) sheetManager.SetDataSource(dataset.source); });
+        TryStep("sheetManager", () => { if (sheetManager != null) sheetManager.SetDataSource(dataset.Source); });
         TryStep("replay", () => { if (sheetManager != null) sheetManager.ReplayEdits(dataset.Edits); });
     }
 

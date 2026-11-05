@@ -55,7 +55,7 @@ public sealed class CallMoveTool : AgenticTool<CallMoveTool.Args> {
             t.localPosition += mgr.transform.InverseTransformVector(worldDelta));
 
         mgr.GetCommittedPose(sheet, out Vector3 nowPos, out _, out _);
-        float actual = mgr.transform.TransformVector(nowPos - pre.pos).magnitude;
+        float actual = mgr.transform.TransformVector(nowPos - pre.Pos).magnitude;
         result["moved"] = direction;
         result["actualMeters"] = Round(actual);
     }

@@ -50,14 +50,14 @@ public abstract class GrabTool : Tool
 
         ManageDatasets.ActiveEdits.PushMove(new MoveRecord
         {
-            sheetId = sheet.sheetId,
-            prePos = prePos,
-            preRot = preRot,
-            preScale = preScale,
-            postPos = sheet.transform.localPosition,
-            postRot = sheet.transform.localRotation,
-            postScale = sheet.transform.localScale,
-            distance = distance
+            SheetId = sheet.sheetId,
+            PrePos = prePos,
+            PreRot = preRot,
+            PreScale = preScale,
+            PostPos = sheet.transform.localPosition,
+            PostRot = sheet.transform.localRotation,
+            PostScale = sheet.transform.localScale,
+            Distance = distance
         }, EditKind);
     }
 

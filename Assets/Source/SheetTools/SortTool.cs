@@ -270,8 +270,8 @@ public class SortTool : Tool
 
     private struct OrderStep
     {
-        public int key;
-        public int pos;
+        public int Key;
+        public int Pos;
     }
 
     private static List<OrderStep> PlanSteps(IReadOnlyList<int> preOrder, IReadOnlyList<int> targetOrder)
@@ -285,7 +285,7 @@ public class SortTool : Tool
             if (at < 0 || at == i) continue;
             working.RemoveAt(at);
             working.Insert(i, want);
-            steps.Add(new OrderStep { key = want, pos = i });
+            steps.Add(new OrderStep { Key = want, Pos = i });
         }
         return steps;
     }
@@ -298,11 +298,11 @@ public class SortTool : Tool
             OrderStep step = steps[i];
             IReadOnlyList<int> live = src.OrderOf(columns);
             int at = -1;
-            for (int b = 0; b * size < live.Count; b++) if (live[b * size] == step.key) { at = b; break; }
-            if (at < 0 || at == step.pos) continue;
+            for (int b = 0; b * size < live.Count; b++) if (live[b * size] == step.Key) { at = b; break; }
+            if (at < 0 || at == step.Pos) continue;
 
-            if (columns) src.MoveColumn(at * size, step.pos * size);
-            else src.MoveRow(at, step.pos);
+            if (columns) src.MoveColumn(at * size, step.Pos * size);
+            else src.MoveRow(at, step.Pos);
 
             if (sheetManager != null) yield return sheetManager.WaitForReflow();
             else yield return null;

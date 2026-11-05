@@ -4,11 +4,11 @@ public static class SheetRaycast
 {
     public struct Hit
     {
-        public bool valid;
-        public SheetCube cube;
-        public Vector3 point;
-        public Vector3 normal;
-        public float distance;
+        public bool Valid;
+        public SheetCube Cube;
+        public Vector3 Point;
+        public Vector3 Normal;
+        public float Distance;
     }
 
     private const int MaxBuffer = 4096;
@@ -35,15 +35,15 @@ public static class SheetRaycast
             best = distance;
             hit = new Hit
             {
-                valid = true,
-                cube = cube,
-                point = closest,
-                normal = distance > 1e-5f ? (point - closest).normalized : Vector3.up,
-                distance = distance
+                Valid = true,
+                Cube = cube,
+                Point = closest,
+                Normal = distance > 1e-5f ? (point - closest).normalized : Vector3.up,
+                Distance = distance
             };
         }
 
-        return hit.valid;
+        return hit.Valid;
     }
 
     public static bool Contains(SheetCube cube, Vector3 point)

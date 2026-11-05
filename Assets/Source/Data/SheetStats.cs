@@ -4,16 +4,16 @@ public static class SheetStats
 {
     public struct Summary
     {
-        public bool valid;
-        public int count;
-        public double min;
-        public double max;
-        public int minVisRow;
-        public int minVisCol;
-        public int maxVisRow;
-        public int maxVisCol;
-        public double mean;
-        public double sum;
+        public bool Valid;
+        public int Count;
+        public double Min;
+        public double Max;
+        public int MinVisRow;
+        public int MinVisCol;
+        public int MaxVisRow;
+        public int MaxVisCol;
+        public double Mean;
+        public double Sum;
     }
 
     public static Summary Over(DataSource data, int rowMin, int rowMax, int colMin, int colMax)
@@ -39,29 +39,29 @@ public static class SheetStats
                 if (!data.HasValue(dataRow, dataCol)) continue;
 
                 double value = data.GetValue(dataRow, dataCol);
-                if (summary.count == 0 || value < summary.min)
+                if (summary.Count == 0 || value < summary.Min)
                 {
-                    summary.min = value;
-                    summary.minVisRow = visRow;
-                    summary.minVisCol = visCol;
+                    summary.Min = value;
+                    summary.MinVisRow = visRow;
+                    summary.MinVisCol = visCol;
                 }
-                if (summary.count == 0 || value > summary.max)
+                if (summary.Count == 0 || value > summary.Max)
                 {
-                    summary.max = value;
-                    summary.maxVisRow = visRow;
-                    summary.maxVisCol = visCol;
+                    summary.Max = value;
+                    summary.MaxVisRow = visRow;
+                    summary.MaxVisCol = visCol;
                 }
 
                 sum += value;
-                summary.count++;
+                summary.Count++;
             }
         }
 
-        if (summary.count == 0) return summary;
+        if (summary.Count == 0) return summary;
 
-        summary.sum = sum;
-        summary.mean = sum / summary.count;
-        summary.valid = true;
+        summary.Sum = sum;
+        summary.Mean = sum / summary.Count;
+        summary.Valid = true;
         return summary;
     }
 }

@@ -167,7 +167,7 @@ public class FilterTool : Tool
     // it is about to raise, so a poke says what it will take before it takes it.
     protected override void OnSheetHover(ReadSheets.Reading reading)
     {
-        if (!Active || sheetManager == null || _open == Axis.None || !reading.valid)
+        if (!Active || sheetManager == null || _open == Axis.None || !reading.Valid)
         {
             ClearTint();
             return;
@@ -186,7 +186,7 @@ public class FilterTool : Tool
     protected override void OnSheetCommit(ReadSheets.Reading reading)
     {
         ClearTint();
-        if (!Active || !reading.valid) return;
+        if (!Active || !reading.Valid) return;
 
         // Without an axis open a poke has no line to mean, so it says so once
         // rather than guessing at the metric and taking the wrong thing off.
@@ -202,8 +202,8 @@ public class FilterTool : Tool
 
         string refusal;
         bool done = _open == Axis.Metric
-            ? Toggle(false, data.DataGroupOf(reading.dataCol), out refusal)
-            : Toggle(true, reading.dataRow, out refusal);
+            ? Toggle(false, data.DataGroupOf(reading.DataCol), out refusal)
+            : Toggle(true, reading.DataRow, out refusal);
 
         if (!done && refusal != null) Notices.Show(this, "Filter", refusal);
     }

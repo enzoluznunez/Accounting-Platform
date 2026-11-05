@@ -5,17 +5,17 @@ public class ReadSheets : MonoBehaviour
 {
     public struct Reading
     {
-        public bool valid;
-        public SheetPiece sheet;
-        public SheetCube cube;
-        public int visRow;
-        public int visCol;
-        public int dataRow;
-        public int dataCol;
-        public Vector3 point;
-        public Vector3 tip;
-        public Vector3 wrist;
-        public Vector3 normal;
+        public bool Valid;
+        public SheetPiece Sheet;
+        public SheetCube Cube;
+        public int VisRow;
+        public int VisCol;
+        public int DataRow;
+        public int DataCol;
+        public Vector3 Point;
+        public Vector3 Tip;
+        public Vector3 Wrist;
+        public Vector3 Normal;
     }
 
     public event Action<Reading> OnHover;
@@ -47,7 +47,7 @@ public class ReadSheets : MonoBehaviour
     {
         if (!Listening) return;
 
-        _pressed = reading.sheet;
+        _pressed = reading.Sheet;
         OnSelect?.Invoke(reading);
     }
 
@@ -55,7 +55,7 @@ public class ReadSheets : MonoBehaviour
     {
         if (!Listening) return;
 
-        bool commits = reading.valid && _pressed != null && _pressed == reading.sheet;
+        bool commits = reading.Valid && _pressed != null && _pressed == reading.Sheet;
         _pressed = null;
 
         OnRelease?.Invoke(reading);
@@ -72,22 +72,22 @@ public class ReadSheets : MonoBehaviour
 
     public static Reading Describe(SheetCube cube, Vector3 point) => new Reading
     {
-        valid = true,
-        sheet = cube.Sheet,
-        cube = cube,
-        visRow = cube.visRow,
-        visCol = cube.visCol,
-        dataRow = cube.dataRow,
-        dataCol = cube.dataCol,
-        point = point
+        Valid = true,
+        Sheet = cube.Sheet,
+        Cube = cube,
+        VisRow = cube.visRow,
+        VisCol = cube.visCol,
+        DataRow = cube.dataRow,
+        DataCol = cube.dataCol,
+        Point = point
     };
 
     public static Reading Describe(SheetRaycast.Hit hit, Vector3 tip, Vector3 wrist)
     {
-        Reading reading = Describe(hit.cube, hit.point);
-        reading.tip = tip;
-        reading.wrist = wrist;
-        reading.normal = hit.normal;
+        Reading reading = Describe(hit.Cube, hit.Point);
+        reading.Tip = tip;
+        reading.Wrist = wrist;
+        reading.Normal = hit.Normal;
         return reading;
     }
 }

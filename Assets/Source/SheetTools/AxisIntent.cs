@@ -2,7 +2,7 @@ using UnityEngine;
 
 public sealed class AxisIntent
 {
-    public float deadband = 0.25f;
+    public float Deadband = 0.25f;
 
     private bool _columns = true;
     private bool _decided;
@@ -27,7 +27,7 @@ public sealed class AxisIntent
         }
 
         if (lead == _columns) return;
-        if (top - other > deadband * Mathf.Abs(top)) _columns = lead;
+        if (top - other > Deadband * Mathf.Abs(top)) _columns = lead;
     }
 
     public void Latch() => _latched = _decided;

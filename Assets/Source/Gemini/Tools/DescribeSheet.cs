@@ -85,11 +85,11 @@ public sealed class DescribeSheet : AgenticTool {
             if (vr < rowMin || vr > rowMax || vc < colMin || vc > colMax) continue;
 
             var entry = new Dictionary<string, object> { { "kind", "strip" } };
-            entry["direction"] = rec.isColumn ? "column" : "row";
-            entry[rec.isColumn ? "column" : "row"] =
-                data.TitleOfData(rec.isColumn, rec.isColumn ? rec.dataCol : rec.dataRow);
-            if (rec.isColumn && data.IsGrouped(true))
-                entry["metric"] = data.GroupTitleOfData(true, rec.dataCol);
+            entry["direction"] = rec.IsColumn ? "column" : "row";
+            entry[rec.IsColumn ? "column" : "row"] =
+                data.TitleOfData(rec.IsColumn, rec.IsColumn ? rec.DataCol : rec.DataRow);
+            if (rec.IsColumn && data.IsGrouped(true))
+                entry["metric"] = data.GroupTitleOfData(true, rec.DataCol);
 
             list.Add(entry);
         }

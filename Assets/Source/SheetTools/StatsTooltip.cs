@@ -14,9 +14,9 @@ public static class StatsTooltip
         piece = null;
         if (tooltip == null || data == null || sheetManager == null) return false;
 
-        piece = reading.sheet != null
-            ? reading.sheet
-            : sheetManager.SheetAt(reading.visRow, reading.visCol);
+        piece = reading.Sheet != null
+            ? reading.Sheet
+            : sheetManager.SheetAt(reading.VisRow, reading.VisCol);
         return piece != null;
     }
 }

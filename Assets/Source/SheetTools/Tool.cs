@@ -36,9 +36,9 @@ public abstract class Tool : MonoBehaviour
     // whole metric the column belongs to.
     protected void TintLine(ReadSheets.Reading reading, bool columns, float swell = Style.PreviewSwell)
     {
-        int lo = reading.visRow, hi = reading.visRow;
-        if (columns) sheetManager.ColumnStripSpan(reading.sheet, reading.visCol, out lo, out hi);
-        sheetManager.SetLineTint(reading.sheet, columns ? 1 : 2, lo, hi, swell);
+        int lo = reading.VisRow, hi = reading.VisRow;
+        if (columns) sheetManager.ColumnStripSpan(reading.Sheet, reading.VisCol, out lo, out hi);
+        sheetManager.SetLineTint(reading.Sheet, columns ? 1 : 2, lo, hi, swell);
     }
 
     private bool _listening;

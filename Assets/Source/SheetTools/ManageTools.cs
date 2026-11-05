@@ -87,7 +87,7 @@ public class ManageTools : MonoBehaviour
     private ManageSheets.UndoResult UndoTop(out string kindName)
     {
         Edit rec = ManageDatasets.ActiveEdits.Peek();
-        kindName = rec != null ? Edit.KindName(rec.kind) : null;
+        kindName = rec != null ? Edit.KindName(rec.Kind) : null;
 
         if (rec == null) return ManageSheets.UndoResult.Stale;
         if (sheetManager == null) return ManageSheets.UndoResult.Unreachable;
@@ -116,14 +116,14 @@ public class ManageTools : MonoBehaviour
         {
             if (i < 0) continue;
             Edit rec = ManageDatasets.ActiveEdits[i];
-            if (rec.kind == EditKind.Sort)
+            if (rec.Kind == EditKind.Sort)
             {
-                if (rec.reorderIsColumn) sortColumns = true;
+                if (rec.ReorderIsColumn) sortColumns = true;
                 else sortRows = true;
             }
-            else if (rec.kind == EditKind.Filter)
+            else if (rec.Kind == EditKind.Filter)
             {
-                if (rec.filterIsRow) filterRows = true;
+                if (rec.FilterIsRow) filterRows = true;
                 else filterColumns = true;
             }
         }
@@ -167,7 +167,7 @@ public class ManageTools : MonoBehaviour
         bool shifted = false;
         for (int i = 0; i < had; i++)
         {
-            EditKind kind = ManageDatasets.ActiveEdits[i].kind;
+            EditKind kind = ManageDatasets.ActiveEdits[i].Kind;
             if (kind == EditKind.Sort || kind == EditKind.Filter) { shifted = true; break; }
         }
 

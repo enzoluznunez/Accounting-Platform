@@ -4,10 +4,10 @@ public class OneEuroPoseFilter
 {
     private const float DerivativeCutoff = 1f;
 
-    public float posMinCutoff = 1f;
-    public float posBeta = 0.02f;
-    public float rotMinCutoff = 1f;
-    public float rotBeta = 0.05f;
+    public float PosMinCutoff = 1f;
+    public float PosBeta = 0.02f;
+    public float RotMinCutoff = 1f;
+    public float RotBeta = 0.05f;
 
     private bool _hasPrevious;
     private Vector3 _position;
@@ -31,12 +31,12 @@ public class OneEuroPoseFilter
 
         Vector3 rawVelocity = (raw.position - _position) / dt;
         _velocity = Vector3.Lerp(_velocity, rawVelocity, Alpha(DerivativeCutoff, dt));
-        float posCutoff = (posMinCutoff + posBeta * _velocity.magnitude) * hardening;
+        float posCutoff = (PosMinCutoff + PosBeta * _velocity.magnitude) * hardening;
         _position = Vector3.Lerp(_position, raw.position, Alpha(posCutoff, dt));
 
         float rawAngularSpeed = Quaternion.Angle(_rotation, raw.rotation) / dt;
         _angularSpeed = Mathf.Lerp(_angularSpeed, rawAngularSpeed, Alpha(DerivativeCutoff, dt));
-        float rotCutoff = (rotMinCutoff + rotBeta * _angularSpeed) * hardening;
+        float rotCutoff = (RotMinCutoff + RotBeta * _angularSpeed) * hardening;
         _rotation = Quaternion.Slerp(_rotation, raw.rotation, Alpha(rotCutoff, dt));
 
         return new Pose(_position, _rotation);

@@ -36,9 +36,9 @@ public class SheetPiece : MonoBehaviour
 
     private struct BarTarget
     {
-        public SheetCube cube;
-        public Vector3 center;
-        public Vector3 size;
+        public SheetCube Cube;
+        public Vector3 Center;
+        public Vector3 Size;
     }
 
     private readonly List<BarTarget> _bars = new List<BarTarget>();
@@ -175,7 +175,7 @@ public class SheetPiece : MonoBehaviour
                 Vector3 center = new Vector3(LineCoord(true, vc), (lo + hi) * 0.5f, z);
                 Vector3 size = new Vector3(half * 2f, hi - lo, half * 2f);
                 cube.SetBox(center, size);
-                _bars.Add(new BarTarget { cube = cube, center = center, size = size });
+                _bars.Add(new BarTarget { Cube = cube, Center = center, Size = size });
 
                 cube.SetColor(ColorFor(data, has, dRow, dCol));
                 cube.SetVisible(true);
@@ -262,14 +262,14 @@ public class SheetPiece : MonoBehaviour
         for (int i = 0; i < _bars.Count; i++)
         {
             BarTarget b = _bars[i];
-            if (b.cube == null) continue;
+            if (b.Cube == null) continue;
 
-            float half = b.size.y * 0.5f;
-            float lo = Mathf.Lerp(_baseY, b.center.y - half, k);
-            float hi = Mathf.Lerp(_baseY, b.center.y + half, k);
+            float half = b.Size.y * 0.5f;
+            float lo = Mathf.Lerp(_baseY, b.Center.y - half, k);
+            float hi = Mathf.Lerp(_baseY, b.Center.y + half, k);
 
-            b.cube.SetBox(new Vector3(b.center.x, (lo + hi) * 0.5f, b.center.z),
-                          new Vector3(b.size.x, hi - lo, b.size.z));
+            b.Cube.SetBox(new Vector3(b.Center.x, (lo + hi) * 0.5f, b.Center.z),
+                          new Vector3(b.Size.x, hi - lo, b.Size.z));
         }
     }
 

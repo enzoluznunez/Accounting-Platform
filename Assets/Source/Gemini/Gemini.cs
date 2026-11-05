@@ -93,7 +93,7 @@ public static class Gemini {
 
     // Init and config: the API key, mic permission, and the Live session config.
 
-    private static Task<bool> ensureMicPermission() {
+    private static Task<bool> EnsureMicPermission() {
         var tcs = new TaskCompletionSource<bool>();
 #if UNITY_ANDROID && !UNITY_EDITOR
         if (Permission.HasUserAuthorizedPermission(Permission.Microphone)) {
@@ -111,7 +111,7 @@ public static class Gemini {
         return tcs.Task;
     }
 
-    private static Task<string> loadApiKey() {
+    private static Task<string> LoadApiKey() {
         var tcs = new TaskCompletionSource<string>();
         var req = UnityWebRequest.Get(StreamingAssets.Url("gemini.key"));
         var op = req.SendWebRequest();
@@ -142,8 +142,8 @@ public static class Gemini {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         try {
             webSearchEnabled = webSearch;
-            var keyTask = loadApiKey();
-            var micTask = ensureMicPermission();
+            var keyTask = LoadApiKey();
+            var micTask = EnsureMicPermission();
             client = new Client(apiKey: await keyTask);
             ResetWindow();
 
@@ -155,12 +155,12 @@ public static class Gemini {
                 _status = GeminiStatus.MicDenied;
             }
 
-            Speaker.init();
+            Speaker.Init();
             sendSignal = new SemaphoreSlim(0);
             actionSignal = new SemaphoreSlim(0);
             if (micGranted) {
-                Voip.init();
-                Voip.turret += sendTick;
+                Voip.Init();
+                Voip.OnAudioCaptured += SendTick;
             }
         }
         catch (Exception e) {
@@ -393,10 +393,10 @@ public static class Gemini {
             sessionCts = null;
             sessionTask = null;
             bool hadMic = micGranted;
-            if (hadMic) Voip.turret -= sendTick;
-            runAudio(() => {
-                if (hadMic) Voip.destroy();
-                Speaker.destroy();
+            if (hadMic) Voip.OnAudioCaptured -= SendTick;
+            RunAudio(() => {
+                if (hadMic) Voip.Destroy();
+                Speaker.Destroy();
             });
             _listening = false;
             _status = GeminiStatus.Off;
@@ -421,7 +421,7 @@ public static class Gemini {
     private static readonly object audioGate = new object();
     private static Task audioTail = Task.CompletedTask;
 
-    private static void runAudio(Action action) {
+    private static void RunAudio(Action action) {
         lock (audioGate) {
             audioTail = audioTail.ContinueWith(_ => {
                 try { action(); }
@@ -438,9 +438,9 @@ public static class Gemini {
         if (_listening) return;
         _listening = true;
         ClearPendingMic();
-        runAudio(() => {
-            Speaker.start();
-            Voip.start();
+        RunAudio(() => {
+            Speaker.Start();
+            Voip.Start();
         });
     }
 
@@ -448,9 +448,9 @@ public static class Gemini {
         if (!_listening) return;
         _listening = false;
         ClearPendingMic();
-        runAudio(() => {
-            Speaker.stop();
-            Voip.stop();
+        RunAudio(() => {
+            Speaker.Stop();
+            Voip.Stop();
         });
     }
 
@@ -472,7 +472,7 @@ public static class Gemini {
         while (sendQueue.TryDequeue(out _)) { }
     }
 
-    private static void sendTick(byte[] data) {
+    private static void SendTick(byte[] data) {
         if (data == null || data.Length == 0) return;
 
         rawFrames++;
@@ -638,11 +638,11 @@ public static class Gemini {
                 Debug.LogWarning($"[Gemini][session] dropping message from retired connection {conn} (gen {gen})");
                 break;
             }
-            receiveTick(s, conn, response);
+            ReceiveTick(s, conn, response);
         }
     }
 
-    private static void receiveTick(AsyncSession s, int conn, LiveServerMessage response) {
+    private static void ReceiveTick(AsyncSession s, int conn, LiveServerMessage response) {
         HandleUsage(response.UsageMetadata, conn);
         HandleControl(s, response);
         HandleTools(s, response);
@@ -755,7 +755,7 @@ public static class Gemini {
         if (interrupted) {
             generationActive = false;
             NoteProtocol("<- interrupted");
-            Speaker.flush();
+            Speaker.Flush();
             FlushUtterance(outTranscript, false);
         }
 
@@ -794,7 +794,7 @@ public static class Gemini {
             var data = parts[i].InlineData;
             if (data?.Data != null && data.Data.Length > 0 &&
                 data.MimeType != null && data.MimeType.StartsWith("audio/pcm", StringComparison.Ordinal)) {
-                Speaker.write(data.Data);
+                Speaker.Write(data.Data);
             }
         }
     }

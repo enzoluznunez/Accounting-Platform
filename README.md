@@ -37,7 +37,7 @@ two years, or switch industries.
 
 | Path | What it holds |
 |---|---|
-| `Assets/Source/` | The app's C# code: `Main` starts the scene and camera rig, `Data` fetches and holds sheets, `Sheet` draws them, `Tools` and `UI` are the hand interface, `InteractionAPI` holds the hand poses, `Audio` wraps the native microphone and speaker plugins, `Poster` builds the figures `Assets/Editor/PosterCapture.cs` renders for the poster, and `Gemini` is the voice assistant and the tools it calls. |
+| `Assets/Source/` | The app's C# code: `Core` holds what the rest share (scene lookups, the camera rig, the main-thread queue, notices), `Data` fetches and holds sheets, `Sheet` draws them, `SheetTools` and `UI` are the hand interface, `InteractionAPI` holds the hand poses, `Audio` wraps the native microphone and speaker plugins, `Poster` builds the figures `Assets/Editor/PosterCapture.cs` renders for the poster, and `Gemini` is the voice assistant and the tools it calls. |
 | `Assets/Scenes/Main.unity` | The one scene the app runs. |
 | `Assets/StreamingAssets/` | Where your key files go (see [Configure the Project](#configure-the-project)). |
 | `Assets/Settings/Build Profiles/Quest Default.asset` | The build profile for the headset. |

@@ -1,11 +1,11 @@
-name: pipeline
+name: backend
 
 on:
   push:
     branches: [main]
-    paths: ["pipeline/**", ".github/workflows/pipeline.yml"]
+    paths: ["backend/**", ".github/workflows/backend.yml"]
   pull_request:
-    paths: ["pipeline/**", ".github/workflows/pipeline.yml"]
+    paths: ["backend/**", ".github/workflows/backend.yml"]
 
 permissions:
   contents: read
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: pipeline
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
 
@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.13" # matches the Lambda runtime
           cache: pip
-          cache-dependency-path: pipeline/requirements-dev.txt
+          cache-dependency-path: backend/requirements-dev.txt
 
       - name: Install dependencies
         run: pip install -r requirements-dev.txt ruff
@@ -32,7 +32,7 @@ jobs:
         run: ruff check --output-format=github .
 
       # The full suite rebuilds a test database from the S3 export, so it needs
-      # AWS and MongoDB Atlas credentials and runs locally (see pipeline/README.md).
+      # AWS and MongoDB Atlas credentials and runs locally (see backend/README.md).
       # Here, collecting every test catches import errors and broken test modules.
       - name: Collect tests
         run: pytest --collect-only -q

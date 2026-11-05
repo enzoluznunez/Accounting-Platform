@@ -1,4 +1,4 @@
-# Lint settings for the pipeline. Ruff's default rules plus import sorting;
+# Lint settings for the backend. Ruff's default rules plus import sorting;
 # CI runs `ruff check` from this directory.
 target-version = "py313"
 line-length = 120

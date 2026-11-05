@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
   The NASBA financial ratios API: api.py on Lambda behind a Function URL,
-  reading MongoDB Atlas. Deploy from pipeline/ with `sam build && sam deploy`.
+  reading MongoDB Atlas. Deploy from backend/ with `sam build && sam deploy`.
 
 Resources:
   NasbaApi:

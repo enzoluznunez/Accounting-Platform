@@ -41,7 +41,7 @@ two years, or switch industries.
 | `Assets/Scenes/Main.unity` | The one scene the app runs. |
 | `Assets/StreamingAssets/` | Where your key files go (see [Configure the Project](#configure-the-project)). |
 | `Assets/Settings/Build Profiles/Quest Default.asset` | The build profile for the headset. |
-| `backend/` | The Python side: rebuilds the MongoDB database from the raw export in S3 (48,429 rows, cleaned to 1,249 companies across fiscal 2019–2020) and serves it as an API on AWS Lambda. See `backend/README.md`. |
+| `Backend/` | The Python side: rebuilds the MongoDB database from the raw export in S3 (48,429 rows, cleaned to 1,249 companies across fiscal 2019–2020) and serves it as an API on AWS Lambda. See `Backend/README.md`. |
 
 The app ships no data. Every sheet is fetched from the API when it is opened.
 
@@ -70,7 +70,7 @@ flowchart LR
     Ada <-->|"audio + tool calls"| Gemini["Google Gemini Live API"]
     Sheet -->|"HTTPS + X-Api-Key"| API["FastAPI on AWS Lambda"]
     API --> Mongo[("MongoDB Atlas")]
-    S3[("Raw export in S3")] -->|"backend/rebuild.py<br/>clean → ratios → publish"| Mongo
+    S3[("Raw export in S3")] -->|"Backend/rebuild.py<br/>clean → ratios → publish"| Mongo
 ```
 
 - **The app** asks the API for `/industries` at startup and fetches each sheet from `/sheet` when it is opened. Hand tools and Ada both edit the open sheet.
@@ -138,7 +138,7 @@ address on one line in `Assets/StreamingAssets/api.url`, such as
 `http://127.0.0.1:8000`. That file goes into headset builds too, and on the
 headset `127.0.0.1` is the headset itself. Use your computer's network address
 for a headset build, and delete the file when you are done so later builds go
-back to the deployed API. `backend/README.md` covers running and deploying the
+back to the deployed API. `Backend/README.md` covers running and deploying the
 API and rebuilding the data.
 
 #### Add Your Gemini API Key
@@ -205,8 +205,8 @@ what's left, and raise the rows you care about — by hand or by asking Ada.
 **Where does the data come from?**
 A financial export in a private S3 bucket, cleaned to 1,249 companies across ten
 industries for fiscal 2019 and 2020, then loaded into MongoDB Atlas by
-`backend/rebuild.py`. The app reads it live through the API, so it always shows the
-database as it stands now. See `backend/README.md` to change or rebuild it.
+`Backend/rebuild.py`. The app reads it live through the API, so it always shows the
+database as it stands now. See `Backend/README.md` to change or rebuild it.
 
 **Can I load my own spreadsheet?**
 Not from inside the app. The sheets come from the financial database; to change what
@@ -234,7 +234,7 @@ sure hand tracking is turned on under the headset's **Settings → Movement Trac
 
 **I don't have `api.key`. Can I still use the app?**
 Not with the deployed database — it refuses requests without the key. Ask the project
-owner, or run the API on your own computer (see `backend/README.md`), which doesn't ask
+owner, or run the API on your own computer (see `Backend/README.md`), which doesn't ask
 for one.
 
 **Unity says my version doesn't match.**

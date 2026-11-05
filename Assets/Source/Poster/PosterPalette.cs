@@ -2,7 +2,7 @@ using UnityEngine;
 
 // The ten division colours the pipeline paints rows with, restated here so a
 // poster figure and a sheet in the headset name the same industry with the same
-// colour. The source of truth is backend/metrics.py (DIVISION_COLORS); this is
+// colour. The source of truth is Backend/metrics.py (DIVISION_COLORS); this is
 // a copy kept in the order that file lists them.
 public static class PosterPalette
 {

@@ -4,7 +4,7 @@ company with its years inside it.
     {_id: ticker, name, gvkey, cik, sic_code, division, address: {...},
      years: [{year, ratios: {...}, fundamentals: {...}}, ...]}
 
-Settings come from the environment, or from backend/.env on a laptop;
+Settings come from the environment, or from Backend/.env on a laptop;
 .env.example shows its shape. On Lambda the environment names a Parameter Store
 entry instead of holding the secret, so a password is never in the template,
 the package or the function's configuration. Nothing here holds one either.
@@ -47,7 +47,7 @@ def client():
     uri = setting("MONGODB_URI")
     if not uri:
         raise RuntimeError(
-            "MONGODB_URI is not set. Copy backend/.env.example to backend/.env "
+            "MONGODB_URI is not set. Copy Backend/.env.example to Backend/.env "
             "and put your Atlas connection string in it."
         )
     # Five seconds rather than the default thirty: an unreachable database

@@ -1,10 +1,10 @@
-# backend
+# Backend
 
 Turns the raw financial export into the sheets the app draws, and serves them.
 
 The export lives in a private S3 bucket; `rebuild.py` turns it into the
 documents MongoDB Atlas holds, and the API serves them. Settings live in
-`backend/.env`, which git ignores — copy `.env.example` to `.env` and fill it
+`Backend/.env`, which git ignores — copy `.env.example` to `.env` and fill it
 in (the Atlas admin user, since rebuilding writes). Reading the export needs an
 AWS login: `aws sso login --profile nasba`.
 

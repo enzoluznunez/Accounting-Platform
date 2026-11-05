@@ -7,12 +7,12 @@ public class Prewarm : MonoBehaviour
 {
     public struct CanvasWarmState
     {
-        internal CanvasGroup group;
-        internal bool added;
-        internal float alpha;
-        internal bool interactable;
-        internal bool blocksRaycasts;
-        internal bool active;
+        internal CanvasGroup Group;
+        internal bool Added;
+        internal float Alpha;
+        internal bool Interactable;
+        internal bool BlocksRaycasts;
+        internal bool Active;
     }
 
     public static void WarmCanvas(ref CanvasWarmState state, Canvas canvas, bool on)
@@ -21,40 +21,40 @@ public class Prewarm : MonoBehaviour
 
         if (on)
         {
-            if (state.active || canvas.gameObject.activeSelf) return;
+            if (state.Active || canvas.gameObject.activeSelf) return;
 
-            state.group = canvas.GetComponent<CanvasGroup>();
-            state.added = state.group == null;
-            if (state.added) state.group = canvas.gameObject.AddComponent<CanvasGroup>();
+            state.Group = canvas.GetComponent<CanvasGroup>();
+            state.Added = state.Group == null;
+            if (state.Added) state.Group = canvas.gameObject.AddComponent<CanvasGroup>();
 
-            state.alpha = state.group.alpha;
-            state.interactable = state.group.interactable;
-            state.blocksRaycasts = state.group.blocksRaycasts;
+            state.Alpha = state.Group.alpha;
+            state.Interactable = state.Group.interactable;
+            state.BlocksRaycasts = state.Group.blocksRaycasts;
 
-            state.group.alpha = 0f;
-            state.group.interactable = false;
-            state.group.blocksRaycasts = false;
+            state.Group.alpha = 0f;
+            state.Group.interactable = false;
+            state.Group.blocksRaycasts = false;
 
             canvas.gameObject.SetActive(true);
-            state.active = true;
+            state.Active = true;
             return;
         }
 
-        if (!state.active) return;
-        state.active = false;
+        if (!state.Active) return;
+        state.Active = false;
         canvas.gameObject.SetActive(false);
 
-        if (state.group != null)
+        if (state.Group != null)
         {
-            if (state.added) Destroy(state.group);
+            if (state.Added) Destroy(state.Group);
             else
             {
-                state.group.alpha = state.alpha;
-                state.group.interactable = state.interactable;
-                state.group.blocksRaycasts = state.blocksRaycasts;
+                state.Group.alpha = state.Alpha;
+                state.Group.interactable = state.Interactable;
+                state.Group.blocksRaycasts = state.BlocksRaycasts;
             }
         }
-        state.group = null;
+        state.Group = null;
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]

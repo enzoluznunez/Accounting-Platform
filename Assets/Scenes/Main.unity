@@ -10985,7 +10985,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ToolPanelUI
   zOffsetFromCamera: 0.45
-  _grabCollider: {fileID: 2024053883}
+  grabCollider: {fileID: 2024053883}
   toolManager: {fileID: 849227663}
 --- !u!4 &2024053877
 Transform:
